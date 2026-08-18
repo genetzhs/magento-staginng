@@ -264,6 +264,11 @@ func runCreate(args []string) {
 		warnf("permission fix had errors: %v", err)
 	}
 
+	// Fix Plesk-incompatible .htaccess directives
+	// Plesk's Apache config doesn't allow FollowSymLinks in .htaccess.
+	// Replace with SymLinksIfOwnerMatch (more secure, Plesk-compatible).
+	fixHtaccessFollowSymLinks(c)
+
 	// Phase 10: basic auth
 	printStep(10, total, "Enable HTTP Basic Auth")
 	if !c.skipBasicAuth {

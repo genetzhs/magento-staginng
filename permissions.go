@@ -4,7 +4,51 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+// fixHtaccessFollowSymLinks replaces FollowSymLinks with SymLinksIfOwnerMatch
+// in all .htaccess files within the staging httpdocs. Plesk's Apache config
+// disallows FollowSymLinks in .htaccess (Options directive), but
+// SymLinksIfOwnerMatch is permitted and provides equivalent functionality
+// with better security (only follows symlinks owned by the same user).
+func fixHtaccessFollowSymLinks(c *config) {
+	if c.dryRun {
+		printInfo("[dry-run] fix FollowSymLinks -> SymLinksIfOwnerMatch in .htaccess files")
+		return
+	}
+	httpdocs := c.targetPath + "/httpdocs"
+	count := 0
+	_ = filepath.Walk(httpdocs, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if filepath.Base(path) != ".htaccess" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		content := string(data)
+		if !strings.Contains(content, "FollowSymLinks") {
+			return nil
+		}
+		// Replace FollowSymLinks with SymLinksIfOwnerMatch
+		newContent := strings.ReplaceAll(content, "FollowSymLinks", "SymLinksIfOwnerMatch")
+		if err := os.WriteFile(path, []byte(newContent), info.Mode()); err == nil {
+			count++
+			c.verbosef("patched %s", path)
+		}
+		return nil
+	})
+	if count > 0 {
+		printOK("patched %d .htaccess file(s) (FollowSymLinks -> SymLinksIfOwnerMatch)", count)
+	}
+}
 
 // fixOwnership sets correct ownership and permissions on the staging
 // httpdocs directory according to Plesk conventions.

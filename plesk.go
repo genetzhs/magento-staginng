@@ -6,10 +6,12 @@ import (
 )
 
 // pleskSubdomainCreate creates a subdomain via Plesk CLI with a custom www-root.
-// www-root is relative to the subscription root.
+// www-root is relative to the subscription root and MUST include the httpdocs
+// suffix so that the document root matches our rsync target
+// (targetPath + "/httpdocs/").
 func pleskSubdomainCreate(c *config) error {
 	if c.dryRun {
-		infof("  [dry-run] plesk bin subdomain --create %s.%s -webspace-name %s -www-root %s/ -php true",
+		infof("  [dry-run] plesk bin subdomain --create %s.%s -webspace-name %s -www-root %s/httpdocs/ -php true",
 			c.stagingName, c.domain, c.domain, c.stagingName)
 		return nil
 	}
@@ -17,7 +19,7 @@ func pleskSubdomainCreate(c *config) error {
 		"/usr/sbin/plesk", "bin", "subdomain", "--create",
 		c.stagingName + "." + c.domain,
 		"-webspace-name", c.domain,
-		"-www-root", c.stagingName + "/",
+		"-www-root", c.stagingName + "/httpdocs/",
 		"-php", "true",
 		"-ssl", "true",
 	}

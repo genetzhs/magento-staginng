@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -63,10 +64,12 @@ func generateHtpasswdBcrypt(user, password string) (string, error) {
 }
 
 // writeHtpasswd writes the .htpasswd file at the given path with secure
-// permissions (chmod 0640, owned by root:psaserv).
+// permissions. The file must be readable by the Apache/PHP process which
+// runs as the system user (e.g. books24). We set owner root:psaserv and
+// mode 0640 so the psaserv group (which includes the system user) can read.
 func writeHtpasswd(c *config, htpasswdPath string) error {
 	if c.dryRun {
-		infof("  [dry-run] write %s", htpasswdPath)
+		printInfo("[dry-run] write %s", htpasswdPath)
 		return nil
 	}
 	line, err := generateHtpasswdBcrypt(c.basicAuthUser, c.basicAuthPass)
@@ -76,13 +79,56 @@ func writeHtpasswd(c *config, htpasswdPath string) error {
 	if err := os.WriteFile(htpasswdPath, []byte(line+"\n"), 0640); err != nil {
 		return fmt.Errorf("failed to write htpasswd: %v", err)
 	}
+	// Set ownership to root:psaserv so Apache (which runs as system user,
+	// a member of psaserv group) can read the file.
 	if err := os.Chmod(htpasswdPath, 0640); err != nil {
 		warnf("chmod htpasswd failed: %v", err)
 	}
-	if err := os.Chown(htpasswdPath, 0, 0); err != nil {
-		// root:root is fine; group doesn't matter for the file
+	if err := os.Chown(htpasswdPath, 0, psaservGID()); err != nil {
+		// Fall back to system user ownership
+		if err2 := os.Chown(htpasswdPath, c.uid(), c.uid()); err2 != nil {
+			warnf("chown htpasswd failed: %v (and fallback %v)", err, err2)
+		}
 	}
 	return nil
+}
+
+// psaservGID returns the GID of the psaserv group (Plesk's web server group).
+// Cached after first lookup.
+var psaservGIDCached = -1
+
+func psaservGID() int {
+	if psaservGIDCached != -1 {
+		return psaservGIDCached
+	}
+	// Look up the psaserv group
+	out, err := run("getent", "group", "psaserv")
+	if err != nil {
+		// Fall back to GID 1004 (common Plesk default)
+		psaservGIDCached = 1004
+		return psaservGIDCached
+	}
+	// getent output: psaserv:x:1004:user1,user2
+	parts := strings.Split(out, ":")
+	if len(parts) >= 3 {
+		gid, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+		if gid > 0 {
+			psaservGIDCached = gid
+			return gid
+		}
+	}
+	psaservGIDCached = 1004
+	return psaservGIDCached
+}
+
+// uid returns the UID of the system user for this staging.
+func (c *config) uid() int {
+	out, err := run("id", "-u", c.sysUser)
+	if err != nil {
+		return 0
+	}
+	uid, _ := strconv.Atoi(strings.TrimSpace(out))
+	return uid
 }
 
 // writeHtaccessFallback writes .htaccess directives that enable HTTP Basic
