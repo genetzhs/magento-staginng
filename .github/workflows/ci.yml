@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build & Vet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          check-latest: true
+          cache: true
+
+      - name: Download deps
+        run: go mod download
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go build (linux/amd64)
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo none)
+          go build -trimpath -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" -o bin/magento-staging-linux-amd64 .
+          ls -lh bin/
+
+      - name: Smoke test (--help)
+        run: |
+          chmod +x bin/magento-staging-linux-amd64
+          bin/magento-staging-linux-amd64 --help | head -5
+          bin/magento-staging-linux-amd64 version || true
+
+      - name: Verify no production identifiers in binary
+        env:
+          # Optional: comma-separated list of production identifiers to scan for.
+          # Set this as a repository variable (Settings > Secrets and variables >
+          # Actions > Variables) with the name FORBIDDEN_IDENTIFIERS.
+          # Example: myclient.com,server1.myclient,203.0.113.10
+          FORBIDDEN_IDENTIFIERS: ${{ vars.FORBIDDEN_IDENTIFIERS }}
+        run: |
+          if [ -z "$FORBIDDEN_IDENTIFIERS" ]; then
+            echo "FORBIDDEN_IDENTIFIERS not set — skipping custom identifier scan"
+            echo "(configure as a repository variable to enable)"
+            exit 0
+          fi
+          echo "Scanning binary for forbidden identifiers..."
+          IFS=',' read -ra patterns <<< "$FORBIDDEN_IDENTIFIERS"
+          found=0
+          for p in "${patterns[@]}"; do
+            p=$(echo "$p" | xargs)  # trim whitespace
+            [ -z "$p" ] && continue
+            if strings bin/magento-staging-linux-amd64 | grep -iF -- "$p"; then
+              echo "ERROR: forbidden identifier found in binary: $p"
+              found=1
+            fi
+          done
+          if [ "$found" = "1" ]; then exit 1; fi
+          echo "Binary clean of forbidden identifiers"
+
+      - name: Upload artifact (amd64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: magento-staging-linux-amd64
+          path: bin/magento-staging-linux-amd64
+          if-no-files-found: error
+          retention-days: 14

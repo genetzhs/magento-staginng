@@ -1,0 +1,24 @@
+# Binaries
+bin/
+*.exe
+magento-staging
+magento-staging-*
+
+# Test artifacts
+debug-env
+debug
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local credentials (never commit)
+credentials/
+*.credentials.json
+.env
+.env.local
+
+# Go workspace artifacts
+vendor/
