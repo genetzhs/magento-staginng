@@ -29,20 +29,33 @@ func rsyncCopy(c *config) error {
 	args = append(args, c.sourcePath+"/", targetHttpdocs+"/")
 
 	if c.dryRun {
-		infof("  [dry-run] rsync %d excludes -> %s", len(rsyncExcludes), targetHttpdocs)
+		printInfo("[dry-run] rsync %d excludes -> %s", len(rsyncExcludes), targetHttpdocs)
 		return nil
 	}
 
+	sp := newSpinner(fmt.Sprintf("Copying files (rsync with %d excludes)", len(rsyncExcludes)))
+	sp.Start()
 	c.verbosef("$ rsync %s", strings.Join(args, " "))
 	out, err := run("rsync", args...)
 	if err != nil {
 		// rsync prints progress to stdout/stderr - keep last bit
 		lines := strings.Split(out, "\n")
 		tail := strings.Join(lines[max(0, len(lines)-5):], "\n")
+		sp.Stop(false, fmt.Sprintf("rsync failed: %v", err))
 		return fmt.Errorf("rsync failed: %v\n%s", err, tail)
 	}
-	// rsync progress goes to stderr (out has combined output)
+	sp.Stop(true, fmt.Sprintf("files copied (%s -> %s)",
+		humanSize(dirSize(targetHttpdocs)), targetHttpdocs))
 	return nil
+}
+
+// dirSize returns the apparent size of a directory in bytes.
+func dirSize(path string) int64 {
+	out, err := run("du", "-sb", path)
+	if err != nil {
+		return 0
+	}
+	return parseDuOutput(out)
 }
 
 // max returns the larger of a or b.

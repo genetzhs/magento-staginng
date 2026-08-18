@@ -179,7 +179,7 @@ func mysqldumpPipe(c *config, schemaOnlyTables []string) error {
 	}
 
 	if c.dryRun {
-		infof("  [dry-run] would pipe mysqldump (2 passes, %d schema-only tables) into mysql %s",
+		printInfo("[dry-run] would pipe mysqldump (2 passes, %d schema-only tables) into mysql %s",
 			len(schemaOnlyTables), c.targetDB)
 		return nil
 	}
@@ -201,17 +201,36 @@ func mysqldumpPipe(c *config, schemaOnlyTables []string) error {
 	// bash with process substitution: { cmd1; cmd2; } | cmd3.
 
 	// Build the bash pipeline. We use bash -c to allow command grouping.
+	// We pipe through sed to strip DEFINER clauses from triggers and
+	// routines, because the target DB user cannot CREATE triggers with a
+	// DEFINER belonging to the source DB user (requires SUPER privilege).
+	// Stripping DEFINER makes them CREATE with DEFINER=CURRENT_USER().
 	pass1 := "mysqldump " + shellQuoteMany(schemaArgs)
 	pass2 := "mysqldump " + shellQuoteMany(dataArgs)
 	mysqlCmd := "mysql " + shellQuoteMany(targetArgs)
-	bashCmd := "{ " + pass1 + " ; " + pass2 + " ; } | " + mysqlCmd
+	// sed patterns strip versioned DEFINER comments:
+	//   /*!50017 DEFINER=`user`@`host`*/      (trigger definer)
+	//   /*!50106 DEFINER=`user`@`host`*/      (event definer)
+	// We use @ as the sed delimiter to avoid conflicts with the / character
+	// in the /* ... */ comment syntax.
+	sedFilter := `sed -E 's@/\*![0-9]+ DEFINER=[^*]*\*/@@g'`
+	bashCmd := "{ " + pass1 + " ; " + pass2 + " ; } | " + sedFilter + " | " + mysqlCmd
 
-	infof("  streaming schema + data (this may take a few minutes)...")
+	sp := newSpinner(fmt.Sprintf("Streaming schema + data (mysqldump %s -> mysql %s)",
+		c.sourceDB, c.targetDB))
+	sp.Start()
 	out, err := run("/bin/bash", "-c", bashCmd)
 	if err != nil {
+		sp.Stop(false, fmt.Sprintf("mysqldump pipe failed: %v", err))
 		return fmt.Errorf("mysqldump pipe failed: %v\n%s", err, out)
 	}
+	sp.Stop(true, fmt.Sprintf("database copied (%s schema-only tables)", boldInt(len(schemaOnlyTables))))
 	return nil
+}
+
+// boldInt returns an integer formatted in bold.
+func boldInt(n int) string {
+	return bold(fmt.Sprintf("%d", n))
 }
 
 // countDataTables returns the total number of tables in the source database.
@@ -354,7 +373,7 @@ func fetchOriginalESPrefixes(c *config) {
 // verifyStagingDB writes a single SQL check to verify the staging URL was set.
 func verifyStagingDB(c *config) error {
 	if c.dryRun {
-		infof("  [dry-run] verify staging URL in core_config_data")
+		printInfo("[dry-run] verify staging URL in core_config_data")
 		return nil
 	}
 	q := "SELECT value FROM core_config_data WHERE path='web/secure/base_url';"
@@ -367,5 +386,6 @@ func verifyStagingDB(c *config) error {
 	if !strings.Contains(out, c.stagingURL()) {
 		return fmt.Errorf("staging URL not set correctly; got: %s", out)
 	}
+	printOK("staging URL verified in core_config_data")
 	return nil
 }

@@ -90,7 +90,8 @@ func (c *config) stagingURL() string {
 // verbosef prints only when --verbose.
 func (c *config) verbosef(format string, args ...interface{}) {
 	if c.verbose {
-		fmt.Fprintf(os.Stderr, "[verbose] "+format+"\n", args...)
+		fmt.Fprintf(os.Stderr, "%s[verbose]%s %s\n",
+			colorGray, colorReset, fmt.Sprintf(format, args...))
 	}
 }
 
@@ -102,18 +103,20 @@ func infof(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, format, args...)
 }
 
-// stepf prints a step header.
+// stepf prints a numbered step header (kept for backward compat).
+// Deprecated: use printStep() instead.
 func stepf(n int, total int, format string, args ...interface{}) {
-	infof("\n[%d/%d] %s", n, total, fmt.Sprintf(format, args...))
+	printStep(n, total, fmt.Sprintf(format, args...))
 }
 
 // warnf prints a warning.
 func warnf(format string, args ...interface{}) {
-	infof("WARNING: "+format, args...)
+	printWarn(format, args...)
 }
 
 // failf prints an error and exits 1.
 func failf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "ERROR: "+format+"\n", args...)
+	printFail(format, args...)
 	os.Exit(1)
 }
+

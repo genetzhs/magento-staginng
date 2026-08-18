@@ -122,16 +122,22 @@ func pleskDatabaseRemove(c *config) error {
 }
 
 // pleskIssueSSL requests a Let's Encrypt certificate for the staging subdomain.
+//
+// Plesk's letsencrypt extension CLI is invoked via:
+//   plesk bin extension --exec letsencrypt cli.php -d <subdomain>
+//
+// We pass only the staging subdomain (not the main domain) because the main
+// domain already has its own cert. Let's Encrypt will issue a cert for the
+// subdomain and Plesk will install it automatically.
 func pleskIssueSSL(c *config) error {
 	if c.dryRun {
-		infof("  [dry-run] plesk bin extension --exec letsencrypt le.php -d %s -d %s.%s",
-			c.domain, c.stagingName, c.domain)
+		infof("  [dry-run] plesk bin extension --exec letsencrypt cli.php -d %s.%s",
+			c.stagingName, c.domain)
 		return nil
 	}
 	args := []string{
 		"/usr/sbin/plesk", "bin", "extension", "--exec", "letsencrypt",
-		"le.php",
-		"-d", c.domain,
+		"cli.php",
 		"-d", c.stagingName + "." + c.domain,
 	}
 	out, err := run(args[0], args[1:]...)

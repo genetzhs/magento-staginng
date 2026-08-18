@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -227,33 +228,39 @@ func estimateStagingSize(c *config) (*sizeEstimate, error) {
 
 // printSizeEstimate prints the disk-space estimate comparison.
 func printSizeEstimate(c *config, est *sizeEstimate) {
-	infof("")
-	infof("=== Disk space estimate ===")
-	infof("")
-	infof("  FILES (httpdocs):")
-	infof("    Source (live):       %s", humanSize(est.SourceFilesBytes))
-	infof("    Staging (with excludes): %s", humanSize(est.StagingFilesBytes))
+	printHeader("Disk space estimate")
+	fmt.Fprintln(os.Stderr)
+
+	fmt.Fprintf(os.Stderr, "  %sFILES (httpdocs):%s\n", colorBold+colorCyan, colorReset)
+	printKeyValue("Source (live)", humanSize(est.SourceFilesBytes))
+	printKeyValue("Staging (with excludes)", humanSize(est.StagingFilesBytes))
 	if est.FilesExcludedBytes > 0 {
-		infof("    Excluded (caches/logs/media cache/.git): %s  (%.1f%% reduction)",
+		printInfo("%sExcluded%s (caches/logs/media/.git): %s  (%.1f%% reduction)",
+			colorYellow, colorReset,
 			humanSize(est.FilesExcludedBytes),
 			100.0*float64(est.FilesExcludedBytes)/float64(est.SourceFilesBytes))
 	}
-	infof("")
-	infof("  DATABASE:")
-	infof("    Source (live):       %s", humanSize(est.SourceDBBytes))
-	infof("    Staging (schema-only tables empty): %s", humanSize(est.StagingDBBytes))
+	fmt.Fprintln(os.Stderr)
+
+	fmt.Fprintf(os.Stderr, "  %sDATABASE:%s\n", colorBold+colorCyan, colorReset)
+	printKeyValue("Source (live)", humanSize(est.SourceDBBytes))
+	printKeyValue("Staging (schema-only empty)", humanSize(est.StagingDBBytes))
 	if est.DBSchemaOnlyBytes > 0 {
-		infof("    Skipped data (schema-only %d tables): %s  (%.1f%% reduction)",
+		printInfo("%sSkipped data%s (%d schema-only tables): %s  (%.1f%% reduction)",
+			colorYellow, colorReset,
 			est.SchemaOnlyTableCount,
 			humanSize(est.DBSchemaOnlyBytes),
 			100.0*float64(est.DBSchemaOnlyBytes)/float64(est.SourceDBBytes))
 	}
-	infof("")
+	fmt.Fprintln(os.Stderr)
+
 	totalStaging := est.StagingFilesBytes + est.StagingDBBytes
 	totalSource := est.SourceFilesBytes + est.SourceDBBytes
-	infof("  TOTAL STAGING footprint: %s  (vs source %s — %.1f%% of live)",
-		humanSize(totalStaging),
+	pctStaging := 100.0 * float64(totalStaging) / float64(totalSource)
+	fmt.Fprintf(os.Stderr, "  %sTOTAL STAGING footprint:%s %s  (vs source %s — %s%.1f%%%s of live)\n",
+		colorBold+colorGreen, colorReset,
+		bold(humanSize(totalStaging)),
 		humanSize(totalSource),
-		100.0*float64(totalStaging)/float64(totalSource))
-	infof("")
+		colorYellow, pctStaging, colorReset)
+	fmt.Fprintln(os.Stderr)
 }

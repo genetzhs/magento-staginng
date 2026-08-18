@@ -64,7 +64,7 @@ func runCreate(args []string) {
 		failf("this tool must be run as root (try: sudo %s)", strings.Join(os.Args, " "))
 	}
 
-	infof("magento-staging %s — creating staging for %s", version, c.domain)
+	printBanner(version, commit, c.domain)
 
 	// Resolve domain interactively if missing
 	if c.domain == "" {
@@ -73,9 +73,9 @@ func runCreate(args []string) {
 		}
 		domains, _ := pleskListDomains()
 		if len(domains) > 0 {
-			infof("Available domains on this server:")
+			printHeader("Available domains on this server")
 			for i, d := range domains {
-				infof("  %d. %s", i+1, d)
+				printInfo("%s%d.%s %s", colorDim, i+1, colorReset, d)
 			}
 		}
 		c.domain = promptValue("Domain to stage", "", validateDomain)
@@ -86,12 +86,15 @@ func runCreate(args []string) {
 	}
 
 	// Resolve system user
+	spinner := newSpinner(fmt.Sprintf("Resolving system user for %s", c.domain))
+	spinner.Start()
 	su, err := pleskSiteInfo(c.domain)
 	if err != nil {
+		spinner.Stop(false, fmt.Sprintf("could not resolve system user: %v", err))
 		failf("could not resolve system user for %s: %v", c.domain, err)
 	}
 	c.sysUser = su
-	infof("system user: %s", c.sysUser)
+	spinner.Stop(true, fmt.Sprintf("system user: %s", bold(c.sysUser)))
 
 	// Verify source httpdocs exists
 	if !pathExists(c.sourcePath) {
@@ -102,10 +105,14 @@ func runCreate(args []string) {
 	}
 
 	// Load source env.php to derive DB name/user/pass etc.
-	infof("reading source env.php...")
+	spinner = newSpinner("Reading source env.php")
+	spinner.Start()
 	if err := readSourceEnvAndDerive(c); err != nil {
+		spinner.Stop(false, fmt.Sprintf("%v", err))
 		failf("%v", err)
 	}
+	spinner.Stop(true, fmt.Sprintf("env.php parsed (PHP %s, DB %s)",
+		bold(c.phpBin), bold(c.sourceDB)))
 
 	// Generate credentials if not provided
 	if c.targetDBPass == "" {
@@ -140,58 +147,83 @@ func runCreate(args []string) {
 	fetchOriginalESPrefixes(c)
 
 	if c.dryRun {
-		infof("\n=== DRY RUN — no changes will be made ===")
+		printHeader("DRY RUN — no changes will be made")
 	}
 
 	// Run phases
 	total := 12
-	stepf(1, total, "Pre-flight validation")
-	if err := preflightChecks(c); err != nil {
-		failf("%v", err)
-	}
 
-	stepf(2, total, "Create Plesk subdomain + database")
-	if err := pleskSubdomainCreate(c); err != nil {
+	// Phase 1: pre-flight
+	printStep(1, total, "Pre-flight validation")
+	sp := newSpinner("Checking for existing staging resources")
+	sp.Start()
+	if err := preflightChecks(c); err != nil {
+		sp.Stop(false, fmt.Sprintf("%v", err))
 		failf("%v", err)
 	}
+	sp.Stop(true, "no existing staging resources found")
+
+	// Phase 2: Plesk resources
+	printStep(2, total, "Create Plesk subdomain + database")
+	sp = newSpinner(fmt.Sprintf("Creating subdomain %s.%s", c.stagingName, c.domain))
+	sp.Start()
+	if err := pleskSubdomainCreate(c); err != nil {
+		sp.Stop(false, fmt.Sprintf("%v", err))
+		failf("%v", err)
+	}
+	sp.Stop(true, fmt.Sprintf("subdomain %s created", bold(c.stagingName+"."+c.domain)))
+
+	sp = newSpinner(fmt.Sprintf("Creating database %s", c.targetDB))
+	sp.Start()
 	if err := pleskDatabaseCreate(c); err != nil {
+		sp.Stop(false, fmt.Sprintf("%v", err))
 		_ = pleskSubdomainRemove(c)
 		failf("%v (rolled back subdomain)", err)
 	}
 	if err := pleskDatabaseUserCreate(c); err != nil {
+		sp.Stop(false, fmt.Sprintf("%v", err))
 		_ = pleskDatabaseRemove(c)
 		_ = pleskSubdomainRemove(c)
 		failf("%v (rolled back DB + subdomain)", err)
 	}
+	sp.Stop(true, fmt.Sprintf("database %s created (user %s)",
+		bold(c.targetDB), bold(c.targetDBUser)))
 
-	stepf(3, total, "Issue SSL certificate")
+	// Phase 3: SSL
+	printStep(3, total, "Issue SSL certificate")
 	if !c.skipSSL {
+		sp = newSpinner(fmt.Sprintf("Requesting Let's Encrypt cert for %s.%s", c.stagingName, c.domain))
+		sp.Start()
 		if err := pleskIssueSSL(c); err != nil {
-			warnf("SSL issuance failed: %v", err)
-			warnf("you can retry later with: plesk bin extension --exec letsencrypt le.php -d %s -d %s.%s",
-				c.domain, c.stagingName, c.domain)
-			infof("continuing with self-signed cert (HTTP will still work)")
+			sp.Stop(false, fmt.Sprintf("SSL issuance failed: %v", err))
+			warnf("you can retry later with: plesk bin extension --exec letsencrypt cli.php -d %s.%s",
+				c.stagingName, c.domain)
+			printInfo("continuing with self-signed cert (HTTPS will still work)")
+		} else {
+			sp.Stop(true, "Let's Encrypt certificate issued")
 		}
 	} else {
-		infof("  skipped (--skip-ssl)")
+		printInfo("skipped (--skip-ssl)")
 	}
 
-	stepf(4, total, "Copy files (rsync with excludes)")
+	// Phase 4: rsync
+	printStep(4, total, "Copy files (rsync with excludes)")
 	if err := rsyncCopy(c); err != nil {
-		// Rollback
 		_ = pleskDatabaseUserRemove(c)
 		_ = pleskDatabaseRemove(c)
 		_ = pleskSubdomainRemove(c)
 		failf("%v (rolled back Plesk resources)", err)
 	}
 
-	stepf(5, total, "Copy database (mysqldump pipe with schema-only tables)")
+	// Phase 5: DB
+	printStep(5, total, "Copy database (mysqldump pipe with schema-only tables)")
 	schemaOnlyTables, err := getSchemaOnlyTables(c)
 	if err != nil {
 		warnf("could not determine schema-only tables: %v (continuing with full data)", err)
 		schemaOnlyTables = nil
 	}
-	infof("  %d tables will be schema-only (no data)", len(schemaOnlyTables))
+	printInfo("%s%d%s tables will be schema-only (no data)",
+		colorBold, len(schemaOnlyTables), colorReset)
 	if err := mysqldumpPipe(c, schemaOnlyTables); err != nil {
 		_ = pleskDatabaseUserRemove(c)
 		_ = pleskDatabaseRemove(c)
@@ -200,19 +232,24 @@ func runCreate(args []string) {
 		failf("%v (rolled back)", err)
 	}
 
-	stepf(6, total, "Patch env.php (DB credentials + Redis prefix)")
+	// Phase 6: env.php
+	printStep(6, total, "Patch env.php (DB credentials + Redis prefix)")
 	if err := patchTargetEnv(c); err != nil {
 		failf("%v\nNOTE: Plesk resources created; manual cleanup needed:\n  plesk bin subdomain --remove %s.%s\n  plesk bin database --remove %s",
 			err, c.stagingName, c.domain, c.targetDB)
 	}
+	printOK("env.php patched (DB=%s, Redis prefix=%s)",
+		bold(c.targetDB), bold(c.redisIDPrefix))
 
-	stepf(7, total, "Update core_config_data (URLs, SMTP, ES prefixes, payments)")
+	// Phase 7: SQL updates
+	printStep(7, total, "Update core_config_data (URLs, SMTP, ES prefixes, payments)")
 	if err := applyStagingConfigSQL(c); err != nil {
 		failf("%v\nNOTE: Plesk resources + files created; manual cleanup needed", err)
 	}
+	printOK("core_config_data updated (URLs, SMTP, SEO, ES, payments, analytics)")
 
-	// Phases 8+ are NOT auto-rolled back (per user choice)
-	stepf(8, total, "Magento CLI setup (setup:upgrade / cache:flush / reindex)")
+	// Phase 8: Magento CLI (no auto-rollback)
+	printStep(8, total, "Magento CLI setup (setup:upgrade / cache:flush / reindex)")
 	if err := magentoSetupUpgrade(c); err != nil {
 		failf("%v\nNOTE: Plesk resources + DB prepared; manual cleanup:", err)
 	}
@@ -221,12 +258,14 @@ func runCreate(args []string) {
 	_ = magentoDeployMode(c)
 	_ = magentoMaintenanceDisable(c)
 
-	stepf(9, total, "Fix ownership and permissions")
+	// Phase 9: permissions
+	printStep(9, total, "Fix ownership and permissions")
 	if err := fixOwnership(c); err != nil {
 		warnf("permission fix had errors: %v", err)
 	}
 
-	stepf(10, total, "Enable HTTP Basic Auth")
+	// Phase 10: basic auth
+	printStep(10, total, "Enable HTTP Basic Auth")
 	if !c.skipBasicAuth {
 		htpasswdPath := c.targetPath + "/.htpasswd"
 		if err := writeHtpasswd(c, htpasswdPath); err != nil {
@@ -237,7 +276,8 @@ func runCreate(args []string) {
 		}
 	}
 
-	stepf(11, total, "Verify staging")
+	// Phase 11: verify
+	printStep(11, total, "Verify staging")
 	if err := verifyStagingDB(c); err != nil {
 		warnf("DB verification: %v", err)
 	}
@@ -245,7 +285,8 @@ func runCreate(args []string) {
 		warnf("HTTP verification: %v", err)
 	}
 
-	stepf(12, total, "Save credentials")
+	// Phase 12: save credentials
+	printStep(12, total, "Save credentials")
 	if err := saveCredentials(c); err != nil {
 		warnf("failed to save credentials: %v", err)
 	}
@@ -296,26 +337,26 @@ func patchTargetEnv(c *config) error {
 // verifyHTTP checks that the staging URL responds.
 func verifyHTTP(c *config) error {
 	if c.dryRun {
-		infof("  [dry-run] curl %s", c.stagingURL())
+		printInfo("[dry-run] curl %s", c.stagingURL())
 		return nil
 	}
 	url := c.stagingURL()
-	infof("  curl %s", url)
+	printInfo("curl %s", url)
 	out, err := run("curl", "-skI", "-o", "/dev/null", "-w", "%{http_code}", url)
 	if err != nil {
 		return fmt.Errorf("curl failed: %v", err)
 	}
 	code := strings.TrimSpace(out)
 	if code == "401" {
-		infof("  ✓ HTTP 401 (basic auth active)")
+		printOK("HTTP 401 (basic auth active)")
 		return nil
 	}
 	if code == "200" || code == "302" {
 		if c.skipBasicAuth {
-			infof("  ✓ HTTP %s (no auth)", code)
+			printOK("HTTP %s (no auth)", code)
 			return nil
 		}
-		warnf("  got HTTP %s but basic auth expected 401 (auth may not be active yet)", code)
+		warnf("got HTTP %s but basic auth expected 401 (auth may not be active yet)", code)
 		return nil
 	}
 	return fmt.Errorf("unexpected HTTP status: %s", code)
@@ -342,96 +383,100 @@ func pleskDatabaseUserRemove(c *config) error {
 
 // printCreateSummary prints the plan before execution (interactive confirmation).
 func printCreateSummary(c *config) {
-	infof("\n=== Staging creation plan ===")
-	infof("  Source:           %s", c.sourcePath)
-	infof("  Target:           %s", c.targetPath)
-	infof("  Staging URL:      %s", c.stagingURL())
-	infof("  Source DB:        %s", c.sourceDB)
-	infof("  Target DB:        %s (user: %s)", c.targetDB, c.targetDBUser)
-	infof("  Redis prefix:     %s", c.redisIDPrefix)
-	infof("  ES suffix:        %s", c.elasticSuffix)
-	infof("  System user:      %s", c.sysUser)
-	infof("  PHP binary:       %s", c.phpBin)
+	printHeader("Staging creation plan")
+	printKeyValue("Source", c.sourcePath)
+	printKeyValue("Target", c.targetPath)
+	printKeyValue("Staging URL", c.stagingURL())
+	printKeyValue("Source DB", c.sourceDB)
+	printKeyValue("Target DB", fmt.Sprintf("%s (user: %s)", c.targetDB, c.targetDBUser))
+	printKeyValue("Redis prefix", c.redisIDPrefix)
+	printKeyValue("ES suffix", c.elasticSuffix)
+	printKeyValue("System user", c.sysUser)
+	printKeyValue("PHP binary", c.phpBin)
 	if !c.skipBasicAuth {
-		infof("  Basic Auth:       %s (password will be generated)", c.basicAuthUser)
+		printKeyValue("Basic Auth", fmt.Sprintf("%s (password will be generated)", c.basicAuthUser))
 	}
-	infof("  Schema-only:      %d base table patterns", len(schemaOnlyPatterns))
+	printKeyValue("Schema-only", fmt.Sprintf("%d base table patterns", len(schemaOnlyPatterns)))
 	if c.noSalesData {
-		infof("  + sales data skipped: orders/invoices/shipments/quotes/rules (%d patterns)", len(salesSchemaOnlyPatterns))
+		printInfo("%s+ sales data skipped:%s orders/invoices/shipments/quotes/rules (%d patterns)",
+			colorYellow, colorReset, len(salesSchemaOnlyPatterns))
 	}
 	if c.noCustomerData {
-		infof("  + customer data skipped: customers/newsletter/reviews/wishlist (%d patterns)", len(customerSchemaOnlyPatterns))
+		printInfo("%s+ customer data skipped:%s customers/newsletter/reviews/wishlist (%d patterns)",
+			colorYellow, colorReset, len(customerSchemaOnlyPatterns))
 	}
-	infof("")
+	fmt.Fprintln(os.Stderr)
 }
 
 // printFinalSummary prints the result summary at the end.
 func printFinalSummary(c *config, schemaOnlyTables []string, est *sizeEstimate) {
-	infof("\n" + strings.Repeat("=", 60))
-	infof(" ✓ Staging created successfully")
-	infof(strings.Repeat("=", 60))
-	infof("  Staging URL:    %s", c.stagingURL())
+	printFinalBanner(true)
+	printKeyValue("Staging URL", c.stagingURL())
 	if c.sourceAdminFrontName != "" {
-		infof("  Admin panel:    %s%s", c.stagingURL(), c.sourceAdminFrontName)
+		printKeyValue("Admin panel", c.stagingURL()+c.sourceAdminFrontName)
 	}
 	if !c.skipBasicAuth {
-		infof("  Basic auth:     %s / %s", c.basicAuthUser, c.basicAuthPass)
+		printKeyValue("Basic auth", fmt.Sprintf("%s / %s", c.basicAuthUser, c.basicAuthPass))
 	}
-	infof("  Path:           %s/httpdocs", c.targetPath)
-	infof("  Database:       %s", c.targetDB)
-	infof("  DB user:        %s", c.targetDBUser)
-	infof("  Redis prefix:   %s", c.redisIDPrefix)
+	printKeyValue("Path", c.targetPath+"/httpdocs")
+	printKeyValue("Database", c.targetDB)
+	printKeyValue("DB user", c.targetDBUser)
+	printKeyValue("Redis prefix", c.redisIDPrefix)
 	if c.originalES6Prefix != "" || c.originalES7Prefix != "" || c.originalAmastyPrefix != "" {
-		infof("  ES prefixes:")
+		fmt.Fprintf(os.Stderr, "  %sES prefixes:%s\n", colorDim, colorReset)
 		if c.originalES6Prefix != "" {
-			infof("    ES6:    %s -> %s%s", c.originalES6Prefix, c.originalES6Prefix, c.elasticSuffix)
+			printInfo("ES6:    %s -> %s%s",
+				c.originalES6Prefix, green(c.originalES6Prefix+c.elasticSuffix), colorReset)
 		}
 		if c.originalES7Prefix != "" {
-			infof("    ES7:    %s -> %s%s", c.originalES7Prefix, c.originalES7Prefix, c.elasticSuffix)
+			printInfo("ES7:    %s -> %s%s",
+				c.originalES7Prefix, green(c.originalES7Prefix+c.elasticSuffix), colorReset)
 		}
 		if c.originalAmastyPrefix != "" {
-			infof("    Amasty: %s -> %s%s", c.originalAmastyPrefix, c.originalAmastyPrefix, c.elasticSuffix)
+			printInfo("Amasty: %s -> %s%s",
+				c.originalAmastyPrefix, green(c.originalAmastyPrefix+c.elasticSuffix), colorReset)
 		}
 	}
-	infof("  Schema-only:    %d tables (data skipped)", len(schemaOnlyTables))
+	printKeyValue("Schema-only", fmt.Sprintf("%d tables (data skipped)", len(schemaOnlyTables)))
 	if c.noSalesData {
-		infof("    (includes sales: orders/invoices/shipments/quotes/rules)")
+		printInfo("(includes sales: orders/invoices/shipments/quotes/rules)")
 	}
 	if c.noCustomerData {
-		infof("    (includes customers/newsletter/reviews/wishlist — GDPR-safe)")
+		printInfo("(includes customers/newsletter/reviews/wishlist — GDPR-safe)")
 	}
 	if est != nil {
-		infof("  Files size:     %s source -> %s staging (%s saved)",
+		printKeyValue("Files size", fmt.Sprintf("%s source -> %s staging (%s saved)",
 			humanSize(est.SourceFilesBytes), humanSize(est.StagingFilesBytes),
-			humanSize(est.FilesExcludedBytes))
-		infof("  DB size:        %s source -> %s staging (%s skipped)",
+			humanSize(est.FilesExcludedBytes)))
+		printKeyValue("DB size", fmt.Sprintf("%s source -> %s staging (%s skipped)",
 			humanSize(est.SourceDBBytes), humanSize(est.StagingDBBytes),
-			humanSize(est.DBSchemaOnlyBytes))
-		infof("  Total staging:  %s", humanSize(est.StagingFilesBytes+est.StagingDBBytes))
+			humanSize(est.DBSchemaOnlyBytes)))
+		printKeyValue("Total staging", humanSize(est.StagingFilesBytes+est.StagingDBBytes))
 	}
-	infof("  Credentials:    %s", c.credsPath)
-	infof("")
-	infof("  Safeguards applied:")
+	printKeyValue("Credentials", c.credsPath)
+	fmt.Fprintln(os.Stderr)
+
+	fmt.Fprintf(os.Stderr, "  %sSafeguards applied:%s\n", colorBold, colorReset)
 	if !c.skipEmailDisable {
-		infof("    ✓ Outgoing emails disabled (system/smtp/disable=1)")
+		printOK("Outgoing emails disabled (system/smtp/disable=1)")
 	}
 	if !c.skipSEODisable {
-		infof("    ✓ NOINDEX,NOFOLLOW")
+		printOK("NOINDEX,NOFOLLOW")
 	}
 	if !c.skipCronDisable {
-		infof("    ✓ Cron disabled (dev/cron/disable=1)")
+		printOK("Cron disabled (dev/cron/disable=1)")
 	}
 	if !c.skipPaymentDisable {
-		infof("    ✓ Payments disabled")
+		printOK("Payments disabled")
 	}
 	if !c.skipAnalyticsDisable {
-		infof("    ✓ Analytics disabled")
+		printOK("Analytics disabled")
 	}
 	if !c.skipBasicAuth {
-		infof("    ✓ HTTP Basic Auth enabled")
+		printOK("HTTP Basic Auth enabled")
 	}
 	if !c.skipSSL {
-		infof("    ✓ SSL (Let's Encrypt)")
+		printOK("SSL (Let's Encrypt)")
 	}
-	infof(strings.Repeat("=", 60))
+	fmt.Fprintf(os.Stderr, "%s%s%s\n", colorGreen, strings.Repeat("═", 60), colorReset)
 }
