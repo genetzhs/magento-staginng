@@ -98,7 +98,7 @@ func (c *config) stagingURL() string {
 func (c *config) verbosef(format string, args ...interface{}) {
 	if c.verbose {
 		fmt.Fprintf(os.Stderr, "%s[verbose]%s %s\n",
-			colorGray, colorReset, fmt.Sprintf(format, args...))
+			colorWhite, colorReset, fmt.Sprintf(format, args...))
 	}
 	c.logWritef("[verbose] "+format, args...)
 }

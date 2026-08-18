@@ -90,7 +90,7 @@ func runCreate(args []string) {
 		if len(domains) > 0 {
 			printHeader("Available domains on this server")
 			for i, d := range domains {
-				printInfo("%s%d.%s %s", colorDim, i+1, colorReset, d)
+				printInfo("%s%d.%s %s", colorWhite, i+1, colorReset, d)
 			}
 		}
 		c.domain = promptValue("Domain to stage", "", validateDomain)
@@ -455,7 +455,7 @@ func printFinalSummary(c *config, schemaOnlyTables []string, est *sizeEstimate) 
 	printKeyValue("DB user", c.targetDBUser)
 	printKeyValue("Redis prefix", c.redisIDPrefix)
 	if c.originalES6Prefix != "" || c.originalES7Prefix != "" || c.originalAmastyPrefix != "" {
-		fmt.Fprintf(os.Stderr, "  %sES prefixes:%s\n", colorDim, colorReset)
+		fmt.Fprintf(os.Stderr, "  %sES prefixes:%s\n", colorWhite, colorReset)
 		if c.originalES6Prefix != "" {
 			printInfo("ES6:    %s -> %s%s",
 				c.originalES6Prefix, green(c.originalES6Prefix+c.elasticSuffix), colorReset)

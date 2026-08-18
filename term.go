@@ -9,20 +9,18 @@ import (
 )
 
 // ANSI color codes (truecolor not needed; basic 8/16 colors are universal).
-// Note: avoid colorGray (90 = bright black) and colorDim (2) for important
-// text — both are nearly invisible on dark terminal backgrounds.
+// Note: colorGray (90) and colorDim (2) are nearly invisible on dark terminal
+// backgrounds — we use colorWhite (37) everywhere instead.
 const (
 	colorReset  = "\033[0m"
 	colorBold   = "\033[1m"
-	colorDim    = "\033[2m"
+	colorWhite  = "\033[37m"
 	colorRed    = "\033[31m"
 	colorGreen  = "\033[32m"
 	colorYellow = "\033[33m"
 	colorBlue   = "\033[34m"
 	colorMagenta= "\033[35m"
 	colorCyan   = "\033[36m"
-	colorWhite  = "\033[37m"
-	colorGray   = "\033[90m" // only for non-critical/verbose output
 )
 
 // detect whether stdout/stderr is a TTY (so we can disable colors when piped).
@@ -46,14 +44,14 @@ func colorize(color, s string) string {
 
 // Styling shortcuts.
 func bold(s string) string   { return colorize(colorBold, s) }
-func dim(s string) string    { return colorize(colorDim, s) }
+func dim(s string) string    { return colorize(colorWhite, s) }
 func red(s string) string    { return colorize(colorRed, s) }
 func green(s string) string  { return colorize(colorGreen, s) }
 func yellow(s string) string { return colorize(colorYellow, s) }
 func blue(s string) string   { return colorize(colorBlue, s) }
 func cyan(s string) string   { return colorize(colorCyan, s) }
 func magenta(s string) string { return colorize(colorMagenta, s) }
-func gray(s string) string   { return colorize(colorGray, s) }
+func gray(s string) string   { return colorize(colorWhite, s) }
 
 // Icons (Unicode, work in most terminals; fall back to ASCII if not TTY).
 var (
@@ -80,7 +78,7 @@ func init() {
 func printHeader(title string) {
 	line := strings.Repeat("─", 60)
 	fmt.Fprintf(os.Stderr, "\n%s%s%s\n", colorBold+colorCyan, title, colorReset)
-	fmt.Fprintf(os.Stderr, "%s%s%s\n", colorGray, line, colorReset)
+	fmt.Fprintf(os.Stderr, "%s%s%s\n", colorWhite, line, colorReset)
 }
 
 // printStep prints a numbered phase header.
@@ -110,7 +108,7 @@ func printWarn(format string, args ...interface{}) {
 // printInfo prints a dim info bullet.
 func printInfo(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "  %s%s%s %s\n",
-		colorGray, iconInfo, colorReset, fmt.Sprintf(format, args...))
+		colorWhite, iconInfo, colorReset, fmt.Sprintf(format, args...))
 }
 
 // printKeyValue prints a key/value pair aligned.
@@ -147,7 +145,7 @@ func newSpinner(msg string) *spinner {
 func (s *spinner) Start() {
 	if !isTTY {
 		// No TTY: just print the message once.
-		fmt.Fprintf(os.Stderr, "  %s%s%s\n", colorDim, s.msg, colorReset)
+		fmt.Fprintf(os.Stderr, "  %s%s%s\n", colorWhite, s.msg, colorReset)
 		return
 	}
 	s.active = true
@@ -173,7 +171,7 @@ func (s *spinner) run() {
 			fmt.Fprintf(os.Stderr, "\r%s%s%s %s %s%s%s",
 				colorCyan, frame, colorReset,
 				msg,
-				colorGray, elapsed, colorReset)
+				colorWhite, elapsed, colorReset)
 			time.Sleep(80 * time.Millisecond)
 			i++
 		}
@@ -239,7 +237,7 @@ func newProgressBar(label string, total int64) *progressBar {
 // Start launches the progress bar in a background goroutine.
 func (p *progressBar) Start() {
 	if !isTTY {
-		fmt.Fprintf(os.Stderr, "  %s%s%s\n", colorDim, p.label, colorReset)
+		fmt.Fprintf(os.Stderr, "  %s%s%s\n", colorWhite, p.label, colorReset)
 		return
 	}
 	p.active = true
@@ -283,7 +281,7 @@ func (p *progressBar) render(cur, tot int64) {
 		colorCyan, p.label, colorReset,
 		colorGreen+bar+colorReset,
 		colorBold, pct, colorReset,
-		colorGray, humanSize(cur), colorReset)
+		colorWhite, humanSize(cur), colorReset)
 }
 
 // Update sets the current value (thread-safe).
@@ -308,7 +306,7 @@ func printBanner(ver, commitStr, domain string) {
 		fmt.Fprintf(os.Stderr, "\n%s%s magento-staging%s %s%s%s %s(%s)%s\n",
 			colorBold+colorMagenta, iconRocket, colorReset,
 			colorBold+colorCyan, ver, colorReset,
-			colorGray, commitStr, colorReset)
+			colorWhite, commitStr, colorReset)
 		fmt.Fprintf(os.Stderr, "%sCreating staging for%s %s%s%s\n\n",
 			colorBold+colorWhite, colorReset,
 			colorBold+colorGreen, domain, colorReset)
