@@ -9,6 +9,8 @@ import (
 )
 
 // ANSI color codes (truecolor not needed; basic 8/16 colors are universal).
+// Note: avoid colorGray (90 = bright black) and colorDim (2) for important
+// text — both are nearly invisible on dark terminal backgrounds.
 const (
 	colorReset  = "\033[0m"
 	colorBold   = "\033[1m"
@@ -19,7 +21,8 @@ const (
 	colorBlue   = "\033[34m"
 	colorMagenta= "\033[35m"
 	colorCyan   = "\033[36m"
-	colorGray   = "\033[90m"
+	colorWhite  = "\033[37m"
+	colorGray   = "\033[90m" // only for non-critical/verbose output
 )
 
 // detect whether stdout/stderr is a TTY (so we can disable colors when piped).
@@ -113,7 +116,7 @@ func printInfo(format string, args ...interface{}) {
 // printKeyValue prints a key/value pair aligned.
 func printKeyValue(key, value string) {
 	fmt.Fprintf(os.Stderr, "  %s%-20s%s %s\n",
-		colorDim, key, colorReset, bold(value))
+		colorCyan, key, colorReset, bold(value))
 }
 
 // progress is an inline spinner that runs in a goroutine while a long
@@ -306,11 +309,13 @@ func printBanner(ver, commitStr, domain string) {
 			colorBold+colorMagenta, iconRocket, colorReset,
 			colorBold+colorCyan, ver, colorReset,
 			colorGray, commitStr, colorReset)
+		fmt.Fprintf(os.Stderr, "%sCreating staging for%s %s%s%s\n\n",
+			colorBold+colorWhite, colorReset,
+			colorBold+colorGreen, domain, colorReset)
 	} else {
 		fmt.Fprintf(os.Stderr, "\nmagento-staging %s (%s)\n", ver, commitStr)
+		fmt.Fprintf(os.Stderr, "Creating staging for %s\n\n", domain)
 	}
-	fmt.Fprintf(os.Stderr, "%s Creating staging for %s%s%s\n\n",
-		colorGray, colorBold+colorGreen, domain, colorReset)
 }
 
 // printFinalBanner prints a colored success/failure banner.

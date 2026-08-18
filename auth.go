@@ -134,7 +134,7 @@ func (c *config) uid() int {
 // writeHtaccessFallback writes .htaccess directives that enable HTTP Basic
 // Auth using a .htpasswd file. Used when plesk protected_url fails.
 func writeHtaccessFallback(c *config, htpasswdPath string) error {
-	htaccessPath := c.targetPath + "/httpdocs/.htaccess"
+	htaccessPath := c.targetPath + "/.htaccess"
 	directive := fmt.Sprintf(`
 # magento-staging basic auth
 AuthType Basic

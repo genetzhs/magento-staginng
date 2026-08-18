@@ -6,12 +6,22 @@ import (
 )
 
 // pleskSubdomainCreate creates a subdomain via Plesk CLI with a custom www-root.
-// www-root is relative to the subscription root and MUST include the httpdocs
-// suffix so that the document root matches our rsync target
-// (targetPath + "/httpdocs/").
+// www-root is relative to the subscription root. We use stagingName/pub/ as
+// the document root (Magento 2 recommended setup). The document root MUST be
+// pub/ because:
+//   - Magento 2's public entry point is pub/index.php
+//   - Static assets (CSS/JS/fonts) live in pub/static/ and are served at /static/
+//   - If docroot is staging/ (not staging/pub/), nginx serves /static/ from
+//     staging/static/ which doesn't exist (the files are in staging/pub/static/)
+//   - Plesk's nginx serves static files directly, bypassing Apache's .htaccess
+//     rewrite rules (source site works because it proxies ALL requests to Apache)
+//
+// Files still live in staging/ (bin/, app/, vendor/, pub/, etc.) — only the
+// docroot points to the pub/ subdirectory, which is the secure Magento 2 setup
+// (app/, vendor/, etc. are not web-accessible).
 func pleskSubdomainCreate(c *config) error {
 	if c.dryRun {
-		infof("  [dry-run] plesk bin subdomain --create %s.%s -webspace-name %s -www-root %s/httpdocs/ -php true",
+		infof("  [dry-run] plesk bin subdomain --create %s.%s -webspace-name %s -www-root %s/pub/ -php true",
 			c.stagingName, c.domain, c.domain, c.stagingName)
 		return nil
 	}
@@ -19,7 +29,7 @@ func pleskSubdomainCreate(c *config) error {
 		"/usr/sbin/plesk", "bin", "subdomain", "--create",
 		c.stagingName + "." + c.domain,
 		"-webspace-name", c.domain,
-		"-www-root", c.stagingName + "/httpdocs/",
+		"-www-root", c.stagingName + "/pub/",
 		"-php", "true",
 		"-ssl", "true",
 	}

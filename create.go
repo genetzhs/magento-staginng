@@ -41,8 +41,23 @@ func runCreate(args []string) {
 	fs.BoolVar(&c.dryRun, "dry-run", false, "Preview only, no changes")
 	fs.BoolVar(&c.nonInteractive, "non-interactive", false, "Fail if any required flag is missing")
 	fs.BoolVar(&c.verbose, "verbose", false, "Verbose output")
+	fs.StringVar(&c.logFile, "log-file", "", "Write a copy of all output to this file")
 
 	_ = fs.Parse(args)
+
+	// Wire global config so package-level infof/warnf can log too.
+	globalConfig = c
+	if c.logFile == "" {
+		// Default log location: alongside credentials
+		c.logFile = "/var/www/vhosts/" + c.domain + "/.credentials/" + c.stagingName + ".log"
+	}
+	if err := c.openLog(); err != nil {
+		// Don't fail — log is best-effort
+		warnf("could not open log file %s: %v", c.logFile, err)
+	} else if c.logWriter != nil {
+		defer c.closeLog()
+		printInfo("Logging to %s", c.logFile)
+	}
 
 	// Handle --version / --help edge cases
 	for _, a := range args {
@@ -249,10 +264,22 @@ func runCreate(args []string) {
 	printOK("core_config_data updated (URLs, SMTP, SEO, ES, payments, analytics)")
 
 	// Phase 8: Magento CLI (no auto-rollback)
-	printStep(8, total, "Magento CLI setup (setup:upgrade / cache:flush / reindex)")
+	printStep(8, total, "Magento CLI setup (upgrade / di:compile / static-content / cache:flush)")
+	// Per Adobe docs, after a URL change the following must run:
+	//   1. setup:upgrade           (schema + data upgrades)
+	//   2. setup:di:compile        (rebuild generated/code/ — production mode)
+	//   3. setup:static-content:deploy  (CSS/JS/fonts to pub/static/)
+	//   4. cache:flush             (clear var/cache, var/page_cache)
+	//   5. indexer:reindex         (refresh search index for new URLs)
+	//   6. deploy:mode:set         (if --magento-mode specified)
+	//   7. maintenance:disable     (open the storefront)
 	if err := magentoSetupUpgrade(c); err != nil {
 		failf("%v\nNOTE: Plesk resources + DB prepared; manual cleanup:", err)
 	}
+	// Clean generated code & caches before DI compile / static deploy
+	cleanMagentoGenerated(c)
+	_ = magentoDICompile(c)
+	_ = magentoDeployStaticContent(c)
 	_ = magentoCacheFlush(c)
 	_ = magentoReindex(c)
 	_ = magentoDeployMode(c)
@@ -318,7 +345,7 @@ func preflightChecks(c *config) error {
 // patchTargetEnv reads the freshly-rsynced env.php from the staging path,
 // patches it with staging values, and writes it back.
 func patchTargetEnv(c *config) error {
-	envPath := c.targetPath + "/httpdocs/app/etc/env.php"
+	envPath := c.targetPath + "/app/etc/env.php"
 	if c.dryRun {
 		infof("  [dry-run] patch %s (DB creds, Redis prefix %s)", envPath, c.redisIDPrefix)
 		return nil
@@ -423,7 +450,7 @@ func printFinalSummary(c *config, schemaOnlyTables []string, est *sizeEstimate) 
 	if !c.skipBasicAuth {
 		printKeyValue("Basic auth", fmt.Sprintf("%s / %s", c.basicAuthUser, c.basicAuthPass))
 	}
-	printKeyValue("Path", c.targetPath+"/httpdocs")
+	printKeyValue("Path", c.targetPath)
 	printKeyValue("Database", c.targetDB)
 	printKeyValue("DB user", c.targetDBUser)
 	printKeyValue("Redis prefix", c.redisIDPrefix)

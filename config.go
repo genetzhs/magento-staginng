@@ -4,7 +4,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
+
+// globalConfig is the active config (set by main) so that package-level
+// helpers infof/warnf can write to the log file.
+var globalConfig = &config{}
 
 // config holds all resolved settings for a create run.
 type config struct {
@@ -38,6 +43,7 @@ type config struct {
 	dryRun            bool
 	nonInteractive    bool
 	verbose           bool
+	logFile           string // path to write a copy of all tool output
 
 	// Resolved at runtime
 	sourceDBUser     string
@@ -51,6 +57,7 @@ type config struct {
 	originalAmastyPrefix string
 	sourceAdminFrontName string
 	credsPath         string
+	logWriter         *os.File // opened log file handle
 }
 
 // derive fills in derived/defaults after raw flags are parsed.
@@ -93,6 +100,7 @@ func (c *config) verbosef(format string, args ...interface{}) {
 		fmt.Fprintf(os.Stderr, "%s[verbose]%s %s\n",
 			colorGray, colorReset, fmt.Sprintf(format, args...))
 	}
+	c.logWritef("[verbose] "+format, args...)
 }
 
 // infof prints always (informational progress).
@@ -101,6 +109,47 @@ func infof(format string, args ...interface{}) {
 		format += "\n"
 	}
 	fmt.Fprintf(os.Stderr, format, args...)
+	globalConfig.logWritef(format, args...)
+}
+
+// logWritef writes a line to the log file if one is open.
+func (c *config) logWritef(format string, args ...interface{}) {
+	if c.logWriter == nil {
+		return
+	}
+	if !strings.HasSuffix(format, "\n") {
+		format += "\n"
+	}
+	fmt.Fprintf(c.logWriter, format, args...)
+}
+
+// openLog opens (or creates) the log file for appending and wires it so
+// that stdout/stderr of child commands is also captured there. The log
+// is line-buffered and flushed on every write.
+func (c *config) openLog() error {
+	if c.logFile == "" {
+		return nil
+	}
+	// Ensure parent dir exists
+	dir := c.logFile[:strings.LastIndexByte(c.logFile, '/')]
+	if dir != "" {
+		_ = os.MkdirAll(dir, 0755)
+	}
+	f, err := os.OpenFile(c.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)
+	if err != nil {
+		return err
+	}
+	c.logWriter = f
+	c.logWritef("=== magento-staging run %s ===", time.Now().Format(time.RFC3339))
+	return nil
+}
+
+// closeLog flushes and closes the log file if open.
+func (c *config) closeLog() {
+	if c.logWriter != nil {
+		c.logWritef("=== end of run ===")
+		_ = c.logWriter.Close()
+	}
 }
 
 // stepf prints a numbered step header (kept for backward compat).

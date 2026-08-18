@@ -5,14 +5,15 @@ import (
 	"strings"
 )
 
-// rsyncCopy copies the source httpdocs to the target httpdocs using rsync
-// with the canonical exclude list. The target directory must exist.
+// rsyncCopy copies the source httpdocs to the target staging path using rsync
+// with the canonical exclude list. The target directory is the staging root
+// directly (e.g. /var/www/vhosts/<domain>/staging/) — NOT staging/httpdocs/,
+// because we want the staging path itself to be the document root.
 func rsyncCopy(c *config) error {
-	// Ensure target httpdocs exists (Plesk subdomain --create should have
+	// Ensure target path exists (Plesk subdomain --create should have
 	// created it but we make sure). Skip in dry-run mode.
-	targetHttpdocs := c.targetPath + "/httpdocs"
-	if !c.dryRun && !pathExists(targetHttpdocs) {
-		mustRun(c, "mkdir", "-p", targetHttpdocs)
+	if !c.dryRun && !pathExists(c.targetPath) {
+		mustRun(c, "mkdir", "-p", c.targetPath)
 	}
 
 	args := []string{
@@ -26,10 +27,12 @@ func rsyncCopy(c *config) error {
 		}
 		args = append(args, "--exclude="+ex)
 	}
-	args = append(args, c.sourcePath+"/", targetHttpdocs+"/")
+	// rsync source/httpdocs/ -> target/  (contents of httpdocs go directly
+	// into the staging root, which is the document root).
+	args = append(args, c.sourcePath+"/", c.targetPath+"/")
 
 	if c.dryRun {
-		printInfo("[dry-run] rsync %d excludes -> %s", len(rsyncExcludes), targetHttpdocs)
+		printInfo("[dry-run] rsync %d excludes -> %s", len(rsyncExcludes), c.targetPath)
 		return nil
 	}
 
@@ -45,7 +48,7 @@ func rsyncCopy(c *config) error {
 		return fmt.Errorf("rsync failed: %v\n%s", err, tail)
 	}
 	sp.Stop(true, fmt.Sprintf("files copied (%s -> %s)",
-		humanSize(dirSize(targetHttpdocs)), targetHttpdocs))
+		humanSize(dirSize(c.targetPath)), c.targetPath))
 	return nil
 }
 

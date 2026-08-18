@@ -17,7 +17,7 @@ func fixHtaccessFollowSymLinks(c *config) {
 		printInfo("[dry-run] fix FollowSymLinks -> SymLinksIfOwnerMatch in .htaccess files")
 		return
 	}
-	httpdocs := c.targetPath + "/httpdocs"
+	httpdocs := c.targetPath
 	count := 0
 	_ = filepath.Walk(httpdocs, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -62,12 +62,12 @@ func fixHtaccessFollowSymLinks(c *config) {
 //   * var/, pub/media/, pub/static/: group-writable (0770 or g+w)
 func fixOwnership(c *config) error {
 	if c.dryRun {
-		infof("  [dry-run] chown -R %s:psaserv %s/httpdocs", c.sysUser, c.targetPath)
+		infof("  [dry-run] chown -R %s:psaserv %s", c.sysUser, c.targetPath)
 		infof("  [dry-run] fix directory/file permissions")
 		return nil
 	}
 
-	httpdocs := c.targetPath + "/httpdocs"
+	httpdocs := c.targetPath
 
 	// chown -R <sysuser>:psaserv httpdocs
 	if out, err := run("chown", "-R", c.sysUser+":psaserv", httpdocs); err != nil {

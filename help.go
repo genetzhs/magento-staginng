@@ -82,7 +82,9 @@ NOTES:
     * Runs as root on the Plesk server (do NOT run remotely).
     * The binary should live in the webspace root
       (e.g. /var/www/vhosts/<domain>/magento-staging) — not web-accessible.
-    * Staging target path is /var/www/vhosts/<domain>/<staging-name>/httpdocs
+    * Staging target path is /var/www/vhosts/<domain>/<staging-name>/
+      (Magento files live directly in this directory, which is also the
+      Plesk subdomain document root).
     * Target DB name uses suffix 'stg' (Plesk requires unique DB names per
       server; we avoid the underscore character because Plesk disallows it).
     * Credentials are stored at
