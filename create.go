@@ -504,7 +504,7 @@ func printFinalSummary(c *config, schemaOnlyTables []string, est *sizeEstimate) 
 	if !c.skipAnalyticsDisable {
 		printOK("Analytics disabled")
 	}
-	printOK("Cookie domain cleared (auto-derived from staging URL)")
+	printOK("Cookie domain set to staging subdomain")
 	if !c.skipBasicAuth {
 		printOK("HTTP Basic Auth enabled")
 	}
