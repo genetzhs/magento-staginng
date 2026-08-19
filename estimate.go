@@ -78,11 +78,12 @@ func estimateFilesSize(c *config) (sourceTotal, stagingTotal int64, err error) {
 	// We use du --exclude=... (same patterns as rsync).
 	duArgs := []string{"-sb"}
 	for _, ex := range rsyncExcludes {
-		if ex == ".git/" && c.includeGit {
+		if ex == "/.git/" && c.includeGit {
 			continue
 		}
 		// du --exclude expects a pattern; trailing /* is fine (du matches
-		// directory entries).
+		// directory entries). Leading "/" anchors the pattern to the
+		// transfer root (same semantics as rsync).
 		duArgs = append(duArgs, "--exclude="+ex)
 	}
 	duArgs = append(duArgs, c.sourcePath)

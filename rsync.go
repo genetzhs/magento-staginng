@@ -22,7 +22,7 @@ func rsyncCopy(c *config) error {
 	}
 	for _, ex := range rsyncExcludes {
 		// Allow --include-git override
-		if ex == ".git/" && c.includeGit {
+		if ex == "/.git/" && c.includeGit {
 			continue
 		}
 		args = append(args, "--exclude="+ex)
