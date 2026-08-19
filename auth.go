@@ -65,7 +65,7 @@ func generateHtpasswdBcrypt(user, password string) (string, error) {
 
 // writeHtpasswd writes the .htpasswd file at the given path with secure
 // permissions. The file must be readable by the Apache/PHP process which
-// runs as the system user (e.g. books24). We set owner root:psaserv and
+// runs as the system user. We set owner root:psaserv and
 // mode 0640 so the psaserv group (which includes the system user) can read.
 func writeHtpasswd(c *config, htpasswdPath string) error {
 	if c.dryRun {

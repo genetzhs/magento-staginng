@@ -285,6 +285,12 @@ func applyStagingConfigSQL(c *config) error {
 	sqls = append(sqls,
 		"UPDATE core_config_data SET value=NULL WHERE path IN ('web/unsecure/base_link_url','web/secure/base_link_url','web/unsecure/base_media_url','web/secure/base_media_url','web/unsecure/base_static_url','web/secure/base_static_url');")
 
+	// Cookie domain: clear it so Magento auto-derives from the staging base URL.
+	// Without this, the production cookie domain (e.g. .example.com) is reused
+	// and sessions leak / break on the staging subdomain.
+	sqls = append(sqls,
+		"UPDATE core_config_data SET value=NULL WHERE path='web/cookie/cookie_domain';")
+
 	// SMTP disable
 	if !c.skipEmailDisable {
 		sqls = append(sqls,
