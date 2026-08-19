@@ -59,17 +59,7 @@ func runCreate(args []string) {
 		printInfo("Logging to %s", c.logFile)
 	}
 
-	// Handle --version / --help edge cases
-	for _, a := range args {
-		if a == "--version" {
-			showVersion()
-		}
-		if a == "--check-update" {
-			checkGitHubUpdate()
-			return
-		}
-	}
-
+	// --version / --check-update are handled in main() before reaching here.
 	if err := c.derive(); err != nil {
 		failf("%v", err)
 	}

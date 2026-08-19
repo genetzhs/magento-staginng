@@ -3,6 +3,11 @@ bin/
 *.exe
 magento-staging
 magento-staging-*
+magento-staginng
+magento-staginng-*
+
+# Serena agent workspace
+.serena/
 
 # Test artifacts
 debug-env
