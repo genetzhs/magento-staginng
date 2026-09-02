@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-09-02
+
+### Changed
+- Source path auto-detection: the document root is resolved from Plesk
+  (`plesk db` → `psa.hosting.www_root`, with domain-alias fallback) instead
+  of assuming `/var/www/vhosts/<domain>/httpdocs`. Handles custom document
+  roots, renamed subscriptions (vhosts directory named after another
+  domain), secondary domains and `pub/` document roots.
+- Staging directory, credentials file and log file are now created under
+  the actual subscription (webspace) root instead of
+  `/var/www/vhosts/<domain>/`.
+- Plesk subdomain creation uses the subscription name resolved from the
+  Plesk database (fallback: the domain itself).
+- `info` and `cleanup` resolve the credentials path via Plesk as well.
+
+### Fixed
+- `create` without `--domain` now prompts for the domain as documented
+  (previously it aborted early with "--domain is required").
+
+### Added
+- Unit tests for the path resolution helpers (`paths_test.go`).
+
 ## [1.0.0] - 2026-08-18
 
 ### Added

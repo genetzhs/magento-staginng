@@ -23,10 +23,12 @@ CREATE FLAGS:
     --domain <domain>              Target domain (e.g. example.com). Required in
                                    non-interactive mode; prompted otherwise.
     --staging-name <name>          Staging subdomain prefix (default: staging)
-    --source-path <path>           Source httpdocs path
-                                   (default: /var/www/vhosts/<domain>/httpdocs)
+    --source-path <path>           Source Magento root path
+                                    (default: auto-detect from the Plesk
+                                    document root of the domain)
     --target-path <path>           Target staging path
-                                   (default: /var/www/vhosts/<domain>/<staging-name>)
+                                    (default: <webspace-root>/<staging-name>,
+                                    auto-detected from Plesk)
     --source-db <db>               Source database (default: auto-detect from env.php)
     --target-db <db>               Target database name (default: <source-db>stg)
     --target-db-user <user>        Target DB user (default: <source-db-user>stg)
@@ -80,15 +82,23 @@ EXAMPLES:
 
 NOTES:
     * Runs as root on the Plesk server (do NOT run remotely).
+    * Paths are resolved by asking Plesk for the document root of the live
+      domain: the source is the Magento root at (or above) that document
+      root, and the staging directory, credentials file and log file are
+      created under the subscription (webspace) root that actually contains
+      the site. This works even when the webspace directory is not named
+      after the domain (renamed subscriptions, secondary domains) or when
+      the document root is not httpdocs (custom roots, pub/ roots).
+      Override with --source-path / --target-path when needed.
     * The binary should live in the webspace root
       (e.g. /var/www/vhosts/<domain>/magento-staging) — not web-accessible.
-    * Staging target path is /var/www/vhosts/<domain>/<staging-name>/
+    * Staging target path is <webspace-root>/<staging-name>/
       (Magento files live directly in this directory, which is also the
       Plesk subdomain document root).
     * Target DB name uses suffix 'stg' (Plesk requires unique DB names per
       server; we avoid the underscore character because Plesk disallows it).
     * Credentials are stored at
-      /var/www/vhosts/<domain>/.credentials/<staging-name>.json (chmod 0400).
+      <webspace-root>/.credentials/<staging-name>.json (chmod 0400).
 `
 
 func showHelp() {

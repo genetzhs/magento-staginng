@@ -14,65 +14,61 @@ var globalConfig = &config{}
 // config holds all resolved settings for a create run.
 type config struct {
 	// Input flags
-	domain            string
-	stagingName       string
-	sourcePath        string
-	targetPath        string
-	sourceDB          string
-	targetDB          string
-	targetDBUser      string
-	targetDBPass      string
-	redisIDPrefix     string
-	elasticSuffix     string
-	basicAuthUser     string
-	basicAuthPass     string
-	phpBin            string
-	magentoMode       string
-	schemaOnlyFile    string
-	noSchemaOnly      bool
-	includeGit        bool
-	skipSSL           bool
-	skipBasicAuth     bool
-	skipPaymentDisable bool
+	domain               string
+	stagingName          string
+	sourcePath           string
+	targetPath           string
+	sourceDB             string
+	targetDB             string
+	targetDBUser         string
+	targetDBPass         string
+	redisIDPrefix        string
+	elasticSuffix        string
+	basicAuthUser        string
+	basicAuthPass        string
+	phpBin               string
+	magentoMode          string
+	schemaOnlyFile       string
+	noSchemaOnly         bool
+	includeGit           bool
+	skipSSL              bool
+	skipBasicAuth        bool
+	skipPaymentDisable   bool
 	skipAnalyticsDisable bool
-	skipCronDisable   bool
-	skipEmailDisable  bool
-	skipSEODisable    bool
-	noSalesData       bool
-	noCustomerData    bool
-	dryRun            bool
-	nonInteractive    bool
-	verbose           bool
-	logFile           string // path to write a copy of all tool output
+	skipCronDisable      bool
+	skipEmailDisable     bool
+	skipSEODisable       bool
+	noSalesData          bool
+	noCustomerData       bool
+	dryRun               bool
+	nonInteractive       bool
+	verbose              bool
+	logFile              string // path to write a copy of all tool output
 
 	// Resolved at runtime
-	sourceDBUser     string
-	sourceDBPass     string
-	sourceDBHost     string
-	sysUser          string // Plesk system user for the subscription
-	sourceMageMode   string
-	originalRedisPrefix string
-	originalES6Prefix string
-	originalES7Prefix string
+	sourceDBUser         string
+	sourceDBPass         string
+	sourceDBHost         string
+	sysUser              string // Plesk system user for the subscription
+	webspaceRoot         string // subscription root dir, e.g. /var/www/vhosts/<webspace>
+	webspaceName         string // subscription name as Plesk knows it (for -webspace-name)
+	sourceDocRoot        string // document root Plesk serves for the live domain
+	sourceMageMode       string
+	originalRedisPrefix  string
+	originalES6Prefix    string
+	originalES7Prefix    string
 	originalAmastyPrefix string
 	sourceAdminFrontName string
-	credsPath         string
-	logWriter         *os.File // opened log file handle
+	credsPath            string
+	logWriter            *os.File // opened log file handle
 }
 
-// derive fills in derived/defaults after raw flags are parsed.
+// derive fills in derived/defaults after raw flags are parsed. Paths that
+// depend on the Plesk layout (source, target, credentials) are resolved
+// later by resolvePaths().
 func (c *config) derive() error {
-	if c.domain == "" {
-		return fmt.Errorf("--domain is required")
-	}
 	if c.stagingName == "" {
 		c.stagingName = "staging"
-	}
-	if c.sourcePath == "" {
-		c.sourcePath = "/var/www/vhosts/" + c.domain + "/httpdocs"
-	}
-	if c.targetPath == "" {
-		c.targetPath = "/var/www/vhosts/" + c.domain + "/" + c.stagingName
 	}
 	if c.phpBin == "" {
 		c.phpBin = "/usr/bin/php"
@@ -82,9 +78,6 @@ func (c *config) derive() error {
 	}
 	if c.basicAuthUser == "" {
 		c.basicAuthUser = "admin"
-	}
-	if c.credsPath == "" {
-		c.credsPath = "/var/www/vhosts/" + c.domain + "/.credentials/" + c.stagingName + ".json"
 	}
 	return nil
 }
@@ -168,4 +161,3 @@ func failf(format string, args ...interface{}) {
 	printFail(format, args...)
 	os.Exit(1)
 }
-

@@ -103,7 +103,7 @@ func runInfo(args []string) {
 		stagingName = "staging"
 	}
 
-	path := fmt.Sprintf("/var/www/vhosts/%s/.credentials/%s.json", domain, stagingName)
+	path := credsPathFor(domain, stagingName)
 	creds, err := loadCredentials(path)
 	if err != nil {
 		failf("could not load credentials from %s: %v", path, err)
@@ -141,7 +141,7 @@ func runCleanup(args []string) {
 	}
 
 	// Load credentials
-	credsPath := fmt.Sprintf("/var/www/vhosts/%s/.credentials/%s.json", domain, stagingName)
+	credsPath := credsPathFor(domain, stagingName)
 	creds, err := loadCredentials(credsPath)
 	if err != nil {
 		warnf("could not load credentials from %s: %v", credsPath, err)
@@ -150,7 +150,7 @@ func runCleanup(args []string) {
 			Domain:      domain,
 			StagingName: stagingName,
 			StagingURL:  fmt.Sprintf("https://%s.%s/", stagingName, domain),
-			TargetPath:  fmt.Sprintf("/var/www/vhosts/%s/%s", domain, stagingName),
+			TargetPath:  webspaceRootForDomain(domain) + "/" + stagingName,
 		}
 	}
 
@@ -175,7 +175,7 @@ func runCleanup(args []string) {
 	infof("removing subdomain...")
 	if err := pleskSubdomainRemove(&config{
 		domain:      domain,
-		stagingName:  stagingName,
+		stagingName: stagingName,
 	}); err != nil {
 		warnf("subdomain removal failed: %v", err)
 	}

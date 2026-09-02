@@ -14,7 +14,7 @@ func runCreate(args []string) {
 
 	fs.StringVar(&c.domain, "domain", "", "Target domain (e.g. example.com)")
 	fs.StringVar(&c.stagingName, "staging-name", "staging", "Staging subdomain prefix")
-	fs.StringVar(&c.sourcePath, "source-path", "", "Source httpdocs path")
+	fs.StringVar(&c.sourcePath, "source-path", "", "Source Magento root path (default: auto-detect from Plesk document root)")
 	fs.StringVar(&c.targetPath, "target-path", "", "Target staging path")
 	fs.StringVar(&c.sourceDB, "source-db", "", "Source database (auto-detected)")
 	fs.StringVar(&c.targetDB, "target-db", "", "Target database name")
@@ -47,17 +47,6 @@ func runCreate(args []string) {
 
 	// Wire global config so package-level infof/warnf can log too.
 	globalConfig = c
-	if c.logFile == "" {
-		// Default log location: alongside credentials
-		c.logFile = "/var/www/vhosts/" + c.domain + "/.credentials/" + c.stagingName + ".log"
-	}
-	if err := c.openLog(); err != nil {
-		// Don't fail — log is best-effort
-		warnf("could not open log file %s: %v", c.logFile, err)
-	} else if c.logWriter != nil {
-		defer c.closeLog()
-		printInfo("Logging to %s", c.logFile)
-	}
 
 	// --version / --check-update are handled in main() before reaching here.
 	if err := c.derive(); err != nil {
@@ -84,10 +73,6 @@ func runCreate(args []string) {
 			}
 		}
 		c.domain = promptValue("Domain to stage", "", validateDomain)
-		// re-derive paths now that domain is known
-		if err := c.derive(); err != nil {
-			failf("%v", err)
-		}
 	}
 
 	// Resolve system user
@@ -101,9 +86,38 @@ func runCreate(args []string) {
 	c.sysUser = su
 	spinner.Stop(true, fmt.Sprintf("system user: %s", bold(c.sysUser)))
 
-	// Verify source httpdocs exists
+	// Resolve document root, webspace root, source and target paths from Plesk
+	spinner = newSpinner(fmt.Sprintf("Resolving document root for %s via Plesk", c.domain))
+	spinner.Start()
+	if err := c.resolvePaths(); err != nil {
+		spinner.Stop(false, fmt.Sprintf("%v", err))
+		failf("%v", err)
+	}
+	if c.sourceDocRoot != "" {
+		spinner.Stop(true, fmt.Sprintf("document root: %s", bold(c.sourceDocRoot)))
+		if c.sourcePath != c.sourceDocRoot {
+			printInfo("magento root: %s", c.sourcePath)
+		}
+	} else {
+		spinner.Stop(true, fmt.Sprintf("source: %s", bold(c.sourcePath)))
+	}
+	printInfo("webspace root: %s (staging will be created at %s)", c.webspaceRoot, c.targetPath)
+
+	// Open the log (default location depends on the resolved webspace root)
+	if c.logFile == "" {
+		c.logFile = c.webspaceRoot + "/.credentials/" + c.stagingName + ".log"
+	}
+	if err := c.openLog(); err != nil {
+		// Don't fail — log is best-effort
+		warnf("could not open log file %s: %v", c.logFile, err)
+	} else if c.logWriter != nil {
+		defer c.closeLog()
+		printInfo("Logging to %s", c.logFile)
+	}
+
+	// Verify source is a Magento installation
 	if !pathExists(c.sourcePath) {
-		failf("source path does not exist: %s", c.sourcePath)
+		failf("source path does not exist: %s (use --source-path to override)", c.sourcePath)
 	}
 	if !pathExists(c.sourcePath + "/app/etc/env.php") {
 		failf("source is not a Magento installation (no app/etc/env.php in %s)", c.sourcePath)

@@ -72,6 +72,22 @@ cd /var/www/vhosts/<domain>
 ./magento-staging cleanup --domain example.com --staging-name staging
 ```
 
+## Path auto-detection
+
+All paths are resolved by asking Plesk for the **document root of the live
+domain** (`plesk db` → `psa` `hosting.www_root`) instead of assuming
+`/var/www/vhosts/<domain>/httpdocs`:
+
+- **Source** — the Magento root at (or above) the Plesk document root.
+  `.../pub` document roots (recommended Magento 2 layout) are handled.
+- **Staging target** — `<webspace-root>/<staging-name>/`
+- **Credentials & log** — `<webspace-root>/.credentials/`
+
+The webspace root is the directory under `/var/www/vhosts/` that actually
+contains the domain — e.g. `/var/www/vhosts/<main-domain>/` for renamed
+subscriptions (the vhosts directory keeps its old name) or for secondary
+domains. Use `--source-path` / `--target-path` to override.
+
 ## What it does
 
 See `docs/architecture.md` for the full phase plan.

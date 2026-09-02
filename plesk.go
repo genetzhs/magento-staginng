@@ -22,13 +22,13 @@ import (
 func pleskSubdomainCreate(c *config) error {
 	if c.dryRun {
 		infof("  [dry-run] plesk bin subdomain --create %s.%s -webspace-name %s -www-root %s/pub/ -php true",
-			c.stagingName, c.domain, c.domain, c.stagingName)
+			c.stagingName, c.domain, c.webspaceName, c.stagingName)
 		return nil
 	}
 	args := []string{
 		"/usr/sbin/plesk", "bin", "subdomain", "--create",
 		c.stagingName + "." + c.domain,
-		"-webspace-name", c.domain,
+		"-webspace-name", c.webspaceName,
 		"-www-root", c.stagingName + "/pub/",
 		"-php", "true",
 		"-ssl", "true",
@@ -136,7 +136,8 @@ func pleskDatabaseRemove(c *config) error {
 // pleskIssueSSL requests a Let's Encrypt certificate for the staging subdomain.
 //
 // Plesk's letsencrypt extension CLI is invoked via:
-//   plesk bin extension --exec letsencrypt cli.php -d <subdomain>
+//
+//	plesk bin extension --exec letsencrypt cli.php -d <subdomain>
 //
 // We pass only the staging subdomain (not the main domain) because the main
 // domain already has its own cert. Let's Encrypt will issue a cert for the
@@ -179,6 +180,119 @@ func pleskProtectedURLCreate(c *config, htpasswdPath string) error {
 		return writeHtaccessFallback(c, htpasswdPath)
 	}
 	return nil
+}
+
+// safeDomainSQL validates a domain name before embedding it into a psa
+// database query (defense in depth: only [A-Za-z0-9.-_] are allowed).
+func safeDomainSQL(domain string) (string, error) {
+	if domain == "" {
+		return "", fmt.Errorf("empty domain")
+	}
+	for _, r := range domain {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '-' || r == '_':
+		default:
+			return "", fmt.Errorf("invalid character %q in domain %q", r, domain)
+		}
+	}
+	return domain, nil
+}
+
+// pleskDBQuery runs a read-only SQL query against the Plesk `psa` database
+// via `plesk db` and returns the first field of the last result row.
+func pleskDBQuery(query string) (string, error) {
+	out, err := run("/usr/sbin/plesk", "db", query)
+	if err != nil {
+		return "", fmt.Errorf("plesk db failed: %v\n%s", err, out)
+	}
+	return dbFirstField(out), nil
+}
+
+// dbFirstField extracts the first column of the last data row of `plesk
+// db` output. It handles both output shapes:
+//   - plain tab-separated rows ("value1\tvalue2")
+//   - mysql ASCII tables ("+----+" borders, "| col | col |" rows)
+//
+// Border lines are skipped; the header row is naturally superseded by the
+// data row that follows it (the LAST field wins).
+func dbFirstField(out string) string {
+	last := ""
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, " \t\r")
+		if line == "" || strings.HasPrefix(line, "+") {
+			continue
+		}
+		if strings.HasPrefix(line, "|") {
+			line = strings.Trim(line, "| ")
+		}
+		field := line
+		if i := strings.IndexAny(line, "\t|"); i >= 0 {
+			field = line[:i]
+		}
+		if field = strings.TrimSpace(field); field != "" {
+			last = field
+		}
+	}
+	return last
+}
+
+// pleskDocumentRoot returns the document root Plesk serves for the given
+// domain — the authoritative location of the live site, which may differ
+// from /var/www/vhosts/<domain>/httpdocs (custom document roots, renamed
+// subscriptions, secondary domains). Domain aliases are followed.
+func pleskDocumentRoot(domain string) (string, error) {
+	safe, err := safeDomainSQL(domain)
+	if err != nil {
+		return "", err
+	}
+	q := "SELECT h.www_root FROM hosting h JOIN domains d ON d.id = h.dom_id " +
+		"WHERE d.name = '" + safe + "'"
+	root, err := pleskDBQuery(q)
+	if err != nil {
+		return "", err
+	}
+	if isDocRootPath(root) {
+		return root, nil
+	}
+	// Not hosted under its own name — maybe a domain alias.
+	q = "SELECT h.www_root FROM domain_aliases a " +
+		"JOIN domains d ON d.id = a.dom_id " +
+		"JOIN hosting h ON h.dom_id = d.id " +
+		"WHERE a.name = '" + safe + "'"
+	root, err = pleskDBQuery(q)
+	if err != nil {
+		return "", err
+	}
+	if isDocRootPath(root) {
+		return root, nil
+	}
+	return "", fmt.Errorf("no hosting entry found for %s in the Plesk database", domain)
+}
+
+// isDocRootPath reports whether s looks like an absolute filesystem path
+// as returned for hosting.www_root (guards against parse hiccups where a
+// column header would surface as the value).
+func isDocRootPath(s string) bool {
+	return strings.HasPrefix(s, "/")
+}
+
+// pleskWebspaceName returns the name of the subscription (webspace) that
+// contains the domain: the domain itself when it is the subscription's
+// main domain, otherwise the main domain's name. Falls back to the given
+// domain when the lookup is not possible.
+func pleskWebspaceName(domain string) string {
+	safe, err := safeDomainSQL(domain)
+	if err != nil {
+		return domain
+	}
+	q := "SELECT wd.name FROM domains d JOIN domains wd ON wd.id = d.webspace_id " +
+		"WHERE d.name = '" + safe + "'"
+	name, err := pleskDBQuery(q)
+	if err != nil || !strings.Contains(name, ".") {
+		return domain
+	}
+	return name
 }
 
 // pleskSiteInfo retrieves the system user for a domain/subscription.

@@ -209,9 +209,9 @@ func readSourceEnvAndDerive(c *config) error {
 
 // detectPHPBin tries to find a PHP binary with the json extension enabled.
 // Order of preference:
-//   1. php_executable_path from env.php (via grep, since we can't parse yet)
-//   2. /opt/plesk/php/<version>/bin/php (highest version first)
-//   3. /usr/bin/php (last resort, may not have json extension)
+//  1. php_executable_path from env.php (via grep, since we can't parse yet)
+//  2. /opt/plesk/php/<version>/bin/php (highest version first)
+//  3. /usr/bin/php (last resort, may not have json extension)
 func detectPHPBin(c *config, envPath string) string {
 	// 1. Try to extract php_executable_path from env.php via grep/sed
 	if out, err := run("grep", "-E", "'php_executable_path'[[:space:]]*=>", envPath); err == nil && out != "" {
@@ -261,7 +261,7 @@ func detectPHPBin(c *config, envPath string) string {
 
 // ensureCredsDir creates the credentials directory with secure perms.
 func ensureCredsDir(c *config) error {
-	dir := "/var/www/vhosts/" + c.domain + "/.credentials"
+	dir := c.webspaceRoot + "/.credentials"
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
