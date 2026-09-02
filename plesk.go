@@ -5,6 +5,46 @@ import (
 	"strings"
 )
 
+// pleskPHPHandlerID returns the Plesk PHP handler configured for the
+// domain (e.g. "plesk-php74-fpm"), or "" when it cannot be resolved.
+func pleskPHPHandlerID(domain string) string {
+	safe, err := safeDomainSQL(domain)
+	if err != nil {
+		return ""
+	}
+	q := "SELECT php_handler_id FROM hosting h JOIN domains d ON d.id = h.dom_id " +
+		"WHERE d.name = '" + safe + "'"
+	id, err := pleskDBQuery(q)
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
+// phpBinFromHandlerID maps a Plesk PHP handler id like "plesk-php74-fpm"
+// to the Plesk multi-PHP CLI binary path (e.g. /opt/plesk/php/7.4/bin/php).
+// Returns "" for handlers without a recognizable version (e.g. OS PHP).
+func phpBinFromHandlerID(id string) string {
+	for _, seg := range strings.Split(id, "-") {
+		if !strings.HasPrefix(seg, "php") {
+			continue
+		}
+		digits := seg[len("php"):]
+		if digits == "" {
+			return ""
+		}
+		for _, r := range digits {
+			if r < '0' || r > '9' {
+				return ""
+			}
+		}
+		// "74" -> "7.4", "83" -> "8.3", "56" -> "5.6"
+		ver := digits[:len(digits)-1] + "." + digits[len(digits)-1:]
+		return "/opt/plesk/php/" + ver + "/bin/php"
+	}
+	return ""
+}
+
 // pleskSubdomainCreate creates a subdomain via Plesk CLI with a custom www-root.
 // www-root is relative to the subscription root. We use stagingName/pub/ as
 // the document root (Magento 2 recommended setup). The document root MUST be
@@ -20,9 +60,13 @@ import (
 // docroot points to the pub/ subdirectory, which is the secure Magento 2 setup
 // (app/, vendor/, etc. are not web-accessible).
 func pleskSubdomainCreate(c *config) error {
+	// Prefer the live domain's PHP handler so the staging subdomain
+	// serves the same PHP version as production (e.g. an old Magento
+	// cannot run on the subscription default if that is newer).
+	handler := c.phpHandlerID
 	if c.dryRun {
-		infof("  [dry-run] plesk bin subdomain --create %s.%s -webspace-name %s -www-root %s/pub/ -php true",
-			c.stagingName, c.domain, c.webspaceName, c.stagingName)
+		infof("  [dry-run] plesk bin subdomain --create %s.%s -webspace-name %s -www-root %s/pub/ -php true -php_handler_id %s -ssl true",
+			c.stagingName, c.domain, c.webspaceName, c.stagingName, handler)
 		return nil
 	}
 	args := []string{
@@ -31,8 +75,11 @@ func pleskSubdomainCreate(c *config) error {
 		"-webspace-name", c.webspaceName,
 		"-www-root", c.stagingName + "/pub/",
 		"-php", "true",
-		"-ssl", "true",
 	}
+	if handler != "" {
+		args = append(args, "-php_handler_id", handler)
+	}
+	args = append(args, "-ssl", "true")
 	out, err := run(args[0], args[1:]...)
 	if err != nil {
 		return fmt.Errorf("plesk subdomain create failed: %v\n%s", err, out)

@@ -150,6 +150,13 @@ func (c *config) resolvePaths() error {
 	// domains).
 	c.webspaceName = pleskWebspaceName(c.domain)
 
+	// PHP handler of the live domain — used both to select the CLI binary
+	// and to configure the staging subdomain with the same PHP version.
+	c.phpHandlerID = pleskPHPHandlerID(c.domain)
+	if c.phpHandlerID != "" {
+		c.verbosef("plesk php handler for %s: %s", c.domain, c.phpHandlerID)
+	}
+
 	docroot, derr := pleskDocumentRoot(c.domain)
 	if derr != nil {
 		c.verbosef("plesk document root lookup for %s failed: %v", c.domain, derr)

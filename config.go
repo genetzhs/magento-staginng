@@ -52,6 +52,7 @@ type config struct {
 	sysUser              string // Plesk system user for the subscription
 	webspaceRoot         string // subscription root dir, e.g. /var/www/vhosts/<webspace>
 	webspaceName         string // subscription name as Plesk knows it (for -webspace-name)
+	phpHandlerID         string // Plesk PHP handler of the live domain (e.g. plesk-php74-fpm)
 	sourceDocRoot        string // document root Plesk serves for the live domain
 	sourceMageMode       string
 	originalRedisPrefix  string

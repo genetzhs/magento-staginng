@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-09-02
+
+### Fixed
+- PHP CLI binary detection now prefers the PHP handler Plesk serves for
+  the live domain (`hosting.php_handler_id`, e.g. plesk-php74-fpm →
+  /opt/plesk/php/7.4/bin/php) over simply picking the highest installed
+  version. Old Magento releases (Composer 1.x in vendor/) fatal on PHP
+  8.1+ ("During inheritance of Countable"), so staging CLI commands must
+  run the production PHP version.
+- The staging subdomain is now created with the live domain's PHP
+  handler (`-php_handler_id`), so web requests match production too.
+
 ## [1.0.6] - 2026-09-02
 
 ### Fixed

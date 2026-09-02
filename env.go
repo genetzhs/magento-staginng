@@ -210,8 +210,10 @@ func readSourceEnvAndDerive(c *config) error {
 // detectPHPBin tries to find a PHP binary with the json extension enabled.
 // Order of preference:
 //  1. php_executable_path from env.php (via grep, since we can't parse yet)
-//  2. /opt/plesk/php/<version>/bin/php (highest version first)
-//  3. /usr/bin/php (last resort, may not have json extension)
+//  2. the PHP handler Plesk serves for the domain (matches production;
+//     an old Magento bundled with Composer 1.x fatals on newer PHP)
+//  3. /opt/plesk/php/<version>/bin/php (highest version first)
+//  4. /usr/bin/php (last resort, may not have json extension)
 func detectPHPBin(c *config, envPath string) string {
 	// 1. Try to extract php_executable_path from env.php via grep/sed
 	if out, err := run("grep", "-E", "'php_executable_path'[[:space:]]*=>", envPath); err == nil && out != "" {
@@ -225,7 +227,15 @@ func detectPHPBin(c *config, envPath string) string {
 		}
 	}
 
-	// 2. Probe /opt/plesk/php/<ver>/bin/php in version-desc order
+	// 2. The domain's Plesk PHP handler (e.g. plesk-php74-fpm)
+	if bin := phpBinFromHandlerID(c.phpHandlerID); bin != "" && pathExists(bin) {
+		if out, err := run(bin, "-m"); err == nil && strings.Contains(out, "json") {
+			c.verbosef("detected php binary from plesk handler %s: %s", c.phpHandlerID, bin)
+			return bin
+		}
+	}
+
+	// 3. Probe /opt/plesk/php/<ver>/bin/php in version-desc order
 	if entries, err := os.ReadDir("/opt/plesk/php"); err == nil {
 		var versions []string
 		for _, e := range entries {
@@ -254,7 +264,7 @@ func detectPHPBin(c *config, envPath string) string {
 		}
 	}
 
-	// 3. Last resort: /usr/bin/php (may not have json, but try)
+	// 4. Last resort: /usr/bin/php (may not have json, but try)
 	c.verbosef("falling back to /usr/bin/php")
 	return "/usr/bin/php"
 }

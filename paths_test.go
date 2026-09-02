@@ -80,6 +80,24 @@ func TestMagentoRootNear(t *testing.T) {
 	}
 }
 
+func TestPhpBinFromHandlerID(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"plesk-php74-fpm", "/opt/plesk/php/7.4/bin/php"},
+		{"plesk-php83-fastcgi", "/opt/plesk/php/8.3/bin/php"},
+		{"plesk-php56-fpm", "/opt/plesk/php/5.6/bin/php"},
+		{"plesk-php80-fpm", "/opt/plesk/php/8.0/bin/php"},
+		{"", ""},
+		{"cgi", ""},
+		{"php", ""},
+		{"phpx-fpm", ""},
+	}
+	for _, c := range cases {
+		if got := phpBinFromHandlerID(c.in); got != c.want {
+			t.Errorf("phpBinFromHandlerID(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestFindMagentoRoot(t *testing.T) {
 	base := t.TempDir()
 
