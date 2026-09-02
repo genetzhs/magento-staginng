@@ -69,16 +69,21 @@ func pleskSubdomainRemove(c *config) error {
 }
 
 // pleskDatabaseCreate creates a database in Plesk.
+//
+// The -domain flag must receive the subscription's MAIN domain
+// (c.webspaceName), not a secondary domain: databases belong to the
+// subscription and Plesk rejects creation with "This object can be
+// created only in a subscription" when given a secondary domain.
 func pleskDatabaseCreate(c *config) error {
 	if c.dryRun {
 		infof("  [dry-run] plesk bin database --create %s -domain %s -type mysql",
-			c.targetDB, c.domain)
+			c.targetDB, c.webspaceName)
 		return nil
 	}
 	args := []string{
 		"/usr/sbin/plesk", "bin", "database", "--create",
 		c.targetDB,
-		"-domain", c.domain,
+		"-domain", c.webspaceName,
 		"-type", "mysql",
 	}
 	out, err := run(args[0], args[1:]...)
@@ -92,13 +97,13 @@ func pleskDatabaseCreate(c *config) error {
 func pleskDatabaseUserCreate(c *config) error {
 	if c.dryRun {
 		infof("  [dry-run] plesk bin database --create-dbuser %s -domain %s -type mysql -database %s -passwd ***",
-			c.targetDBUser, c.domain, c.targetDB)
+			c.targetDBUser, c.webspaceName, c.targetDB)
 		return nil
 	}
 	args := []string{
 		"/usr/sbin/plesk", "bin", "database", "--create-dbuser",
 		c.targetDBUser,
-		"-domain", c.domain,
+		"-domain", c.webspaceName,
 		"-type", "mysql",
 		"-database", c.targetDB,
 		"-passwd", c.targetDBPass,
@@ -110,8 +115,19 @@ func pleskDatabaseUserCreate(c *config) error {
 	return nil
 }
 
-// pleskDatabaseExists checks if the database already exists in Plesk.
+// pleskDatabaseExists checks if the database already exists.
+// `plesk bin database --info` is not a valid command on all Plesk
+// versions ("Unknown command"), so the authoritative check is a
+// SHOW DATABASES query through `plesk db`.
 func pleskDatabaseExists(c *config) bool {
+	safe, err := safeDomainSQL(c.targetDB)
+	if err == nil {
+		name, qerr := pleskDBQuery("SHOW DATABASES LIKE '" + safe + "'")
+		if qerr == nil {
+			return name != ""
+		}
+	}
+	// Fall back to the old CLI form (works on some versions).
 	out, err := run("/usr/sbin/plesk", "bin", "database", "--info", c.targetDB)
 	return err == nil && !strings.Contains(strings.ToLower(out), "does not exist")
 }

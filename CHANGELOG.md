@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-09-02
+
+### Fixed
+- Database and DB user creation now passes the subscription's MAIN
+  domain to `plesk bin database` (`-domain <webspace-name>`). Creating
+  them with a secondary domain failed with "This object can be created
+  only in a subscription."
+- Database existence check: `plesk bin database --info` is not a valid
+  command on all Plesk versions ("Unknown command: --info"); the check
+  now uses `plesk db "SHOW DATABASES LIKE '<db>'"` with the old CLI form
+  as fallback.
+
 ## [1.0.5] - 2026-09-02
 
 ### Fixed
