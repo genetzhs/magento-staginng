@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-09-02
+
+### Fixed
+- Disk space estimate for files: the staging size is now measured with
+  `rsync -a -n --stats` using the exact exclude patterns of the real copy.
+  Previously it used `du --exclude`, which never matched the leading-"/"
+  anchored patterns (du matches "/"-patterns against the whole absolute
+  path, rsync against paths relative to the transfer root) — so the
+  estimate reported ~zero savings and over-reported the staging footprint
+  by the size of var/log, var/cache, pub/static, .git, etc.
+
 ## [1.0.4] - 2026-09-02
 
 ### Changed

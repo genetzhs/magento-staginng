@@ -10,13 +10,13 @@ import (
 // sizeEstimate holds the disk-space estimates for staging creation.
 type sizeEstimate struct {
 	// Files (httpdocs)
-	SourceFilesBytes int64
-	StagingFilesBytes int64
+	SourceFilesBytes   int64
+	StagingFilesBytes  int64
 	FilesExcludedBytes int64
 
 	// Database
-	SourceDBBytes int64
-	StagingDBBytes int64
+	SourceDBBytes     int64
+	StagingDBBytes    int64
 	DBSchemaOnlyBytes int64
 
 	// Schema-only table list (resolved)
@@ -61,11 +61,17 @@ func parseDuOutput(out string) int64 {
 	return n
 }
 
-// estimateFilesSize runs `du` on the source path with the rsync exclude
-// patterns to compute:
-//   - Total source httpdocs size (no excludes)
-//   - Staging httpdocs size (with excludes applied)
-//   - Bytes excluded (difference)
+// estimateFilesSize computes:
+//   - Total source size (apparent bytes) via `du -sb`
+//   - Staging size via `rsync -a -n --stats` with the SAME exclude
+//     patterns as the real copy
+//
+// The staging size MUST come from rsync itself: the exclude patterns are
+// anchored with a leading "/" (rsync transfer-root semantics, e.g.
+// "/var/cache/*"), but `du --exclude` matches "/"-patterns against the
+// entire absolute path — so du never matches them and would report
+// ~zero savings. rsync --stats evaluates the patterns exactly like the
+// real run and reports what would actually be transferred.
 func estimateFilesSize(c *config) (sourceTotal, stagingTotal int64, err error) {
 	// Total source size (apparent bytes for accuracy)
 	out, runErr := run("du", "-sb", c.sourcePath)
@@ -74,29 +80,73 @@ func estimateFilesSize(c *config) (sourceTotal, stagingTotal int64, err error) {
 	}
 	sourceTotal = parseDuOutput(out)
 
-	// Staging size = source size with excludes applied
-	// We use du --exclude=... (same patterns as rsync).
-	duArgs := []string{"-sb"}
+	// Staging size = what rsync would copy with the excludes applied.
+	args := []string{"-a", "-n", "--stats"}
 	for _, ex := range rsyncExcludes {
 		if ex == "/.git/" && c.includeGit {
 			continue
 		}
-		// du --exclude expects a pattern; trailing /* is fine (du matches
-		// directory entries). Leading "/" anchors the pattern to the
-		// transfer root (same semantics as rsync).
-		duArgs = append(duArgs, "--exclude="+ex)
+		args = append(args, "--exclude="+ex)
 	}
-	duArgs = append(duArgs, c.sourcePath)
-
-	out, runErr = run("du", duArgs...)
+	// Dry run: nothing is written to the target.
+	args = append(args, c.sourcePath+"/", "/tmp/magento-staging-estimate-target/")
+	out, runErr = run("rsync", args...)
 	if runErr != nil {
-		// du may fail on permission errors; fall back to estimate
-		c.verbosef("du with excludes failed: %v\n%s", runErr, out)
+		// rsync unavailable or failed — fall back to the full source size
+		// (better to overestimate the disk needed than to fail).
+		c.verbosef("rsync estimate failed: %v\n%s", runErr, out)
 		return sourceTotal, sourceTotal, nil
 	}
-	stagingTotal = parseDuOutput(out)
+	if n, ok := parseRsyncTotalSize(out); ok {
+		return sourceTotal, n, nil
+	}
+	c.verbosef("could not parse rsync --stats output; falling back to source size")
+	return sourceTotal, sourceTotal, nil
+}
 
-	return sourceTotal, stagingTotal, nil
+// parseRsyncTotalSize extracts the "Total transferred file size" (bytes)
+// from `rsync --stats` output, falling back to "Total file size" when no
+// transfer would happen. Numbers may be formatted with thousands separators.
+func parseRsyncTotalSize(out string) (int64, bool) {
+	transferred := int64(-1)
+	total := int64(-1)
+	for _, line := range strings.Split(out, "\n") {
+		if v, ok := parseRsyncSizeLine(line, "Total transferred file size:"); ok {
+			transferred = v
+		}
+		if v, ok := parseRsyncSizeLine(line, "Total file size:"); ok {
+			total = v
+		}
+	}
+	if transferred >= 0 {
+		return transferred, true
+	}
+	if total >= 0 {
+		return total, true
+	}
+	return 0, false
+}
+
+// parseRsyncSizeLine parses one "Prefix: 1,234,567 bytes" style line,
+// returning the byte count.
+func parseRsyncSizeLine(line, prefix string) (int64, bool) {
+	if !strings.HasPrefix(line, prefix) {
+		return 0, false
+	}
+	var digits []byte
+	for i := len(prefix); i < len(line); i++ {
+		if line[i] >= '0' && line[i] <= '9' {
+			digits = append(digits, line[i])
+		}
+	}
+	if len(digits) == 0 {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(string(digits), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // estimateDBSize queries information_schema for:
@@ -161,11 +211,12 @@ func estimateDBSize(c *config, schemaOnlyTables []string) (sourceTotal, stagingT
 // output (handles the +----+ borders and column headers).
 //
 // `plesk db` returns output like:
-//   +-----------------------------------------+
-//   | IFNULL(SUM(data_length+index_length),0) |
-//   +-----------------------------------------+
-//   |                              3142369280 |
-//   +-----------------------------------------+
+//
+//	+-----------------------------------------+
+//	| IFNULL(SUM(data_length+index_length),0) |
+//	+-----------------------------------------+
+//	|                              3142369280 |
+//	+-----------------------------------------+
 //
 // We want the last numeric row (skip borders and the header row).
 func parsePLESKDBNumber(out string) int64 {
