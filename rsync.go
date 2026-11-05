@@ -33,7 +33,11 @@ func rsyncCopy(c *config) error {
 	if c.isRemote() {
 		// Pull from the live server over SSH (compressed, args protected
 		// from remote shell word-splitting).
-		args = append(args, "-z", "-s", "-e", rsyncRemoteShell(c))
+		// Source owners are mapped by NAME on the receiver; on another
+		// server that name may belong to an unrelated subscription, so
+		// force the staging system user right away.
+		args = append(args, "-z", "-s", "-e", rsyncRemoteShell(c),
+			"--chown="+c.sysUser+":psaserv")
 		src = remoteSpec(c) + ":" + src
 	}
 	args = append(args, src, c.targetPath+"/")

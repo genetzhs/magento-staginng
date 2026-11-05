@@ -68,6 +68,35 @@ func subscriptionLoginFor(host string) string {
 	return s
 }
 
+// systemUserExists reports whether a Unix user with this name exists.
+func systemUserExists(name string) bool {
+	_, err := run("id", "-u", name)
+	return err == nil
+}
+
+// freeSystemUser returns base, or base with a "stg"/"stgN" suffix when
+// that system user is already taken (e.g. the live domain also exists on
+// this server). Plesk logins are limited to 16 characters here.
+func freeSystemUser(base string) string {
+	if !systemUserExists(base) {
+		return base
+	}
+	for i := 0; i < 100; i++ {
+		suffix := "stg"
+		if i > 0 {
+			suffix = fmt.Sprintf("stg%d", i)
+		}
+		b := base
+		if len(b)+len(suffix) > 16 {
+			b = b[:16-len(suffix)]
+		}
+		if !systemUserExists(b + suffix) {
+			return b + suffix
+		}
+	}
+	return base
+}
+
 // strongPassword returns a random password that also satisfies Plesk's
 // password strength policy (upper, lower, digit and symbol present).
 func strongPassword(length int) string {

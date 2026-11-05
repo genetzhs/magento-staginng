@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-05
+
+### Fixed
+- `migrate`: files pulled over SSH kept the source owner NAME, which on
+  the destination can belong to another subscription (e.g. when the live
+  domain also exists there), so `bin/magento` failed with "Permission
+  denied". rsync now uses `--chown=<sysuser>:psaserv` and ownership is
+  fixed before the Magento CLI phase.
+- `migrate`: the derived system user gets a `stg` suffix when the name is
+  already taken on the destination; an explicit `--sys-user` that exists
+  is rejected up front.
+
 ## [1.1.0] - 2026-11-05
 
 ### Added

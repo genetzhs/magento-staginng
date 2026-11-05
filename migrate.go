@@ -116,7 +116,9 @@ func runMigrate(args []string) {
 	c.targetDBHost = "localhost"
 	c.webspaceName = c.stagingFQDN
 	if c.subLogin == "" {
-		c.subLogin = subscriptionLoginFor(c.stagingFQDN)
+		c.subLogin = freeSystemUser(subscriptionLoginFor(c.stagingFQDN))
+	} else if systemUserExists(c.subLogin) {
+		failf("--sys-user %s already exists on this server", c.subLogin)
 	}
 	c.sysUser = c.subLogin
 	c.subPass = strongPassword(20)
@@ -289,6 +291,10 @@ func runMigrate(args []string) {
 	printOK("core_config_data updated")
 
 	printStep(8, total, "Magento CLI setup")
+	// bin/magento runs as the subscription user: it must own the tree.
+	if err := fixOwnership(c); err != nil {
+		warnf("permission fix had errors: %v", err)
+	}
 	if err := magentoSetupUpgrade(c); err != nil {
 		failf("%v\nNOTE: subscription %s left in place", err, c.stagingFQDN)
 	}
@@ -311,7 +317,7 @@ func runMigrate(args []string) {
 		printInfo("skipped (--skip-ssl)")
 	} else if err := pleskIssueSSL(c); err != nil {
 		warnf("SSL issuance failed (DNS of %s must point to this server): %v", c.stagingFQDN, err)
-	} else {
+	} else if !c.dryRun {
 		printOK("Let's Encrypt certificate issued")
 	}
 
