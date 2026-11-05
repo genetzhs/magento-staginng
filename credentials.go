@@ -10,21 +10,31 @@ import (
 // credentials is the JSON document stored at
 // /var/www/vhosts/<domain>/.credentials/<staging-name>.json (chmod 0400).
 type credentials struct {
-	Domain            string            `json:"domain"`
-	StagingName       string            `json:"staging_name"`
-	StagingURL        string            `json:"staging_url"`
-	AdminPath         string            `json:"admin_path,omitempty"`
-	SourcePath        string            `json:"source_path"`
-	TargetPath        string            `json:"target_path"`
-	SourceDB          string            `json:"source_db"`
-	TargetDB          dbCreds           `json:"target_db"`
-	RedisIDPrefix     string            `json:"redis_id_prefix"`
-	ElasticSuffix     string            `json:"elastic_suffix"`
-	ElasticPrefixes   elasticPrefixes   `json:"elastic_prefixes"`
-	BasicAuth         basicAuth         `json:"basic_auth,omitempty"`
-	CreatedAt         string            `json:"created_at"`
-	MagentoMode       string            `json:"magento_mode,omitempty"`
-	BinaryVersion     string            `json:"binary_version"`
+	Domain          string          `json:"domain"`
+	StagingName     string          `json:"staging_name"`
+	StagingURL      string          `json:"staging_url"`
+	AdminPath       string          `json:"admin_path,omitempty"`
+	SourcePath      string          `json:"source_path"`
+	TargetPath      string          `json:"target_path"`
+	SourceDB        string          `json:"source_db"`
+	TargetDB        dbCreds         `json:"target_db"`
+	RedisIDPrefix   string          `json:"redis_id_prefix"`
+	ElasticSuffix   string          `json:"elastic_suffix"`
+	ElasticPrefixes elasticPrefixes `json:"elastic_prefixes"`
+	BasicAuth       basicAuth       `json:"basic_auth,omitempty"`
+	CreatedAt       string          `json:"created_at"`
+	MagentoMode     string          `json:"magento_mode,omitempty"`
+	BinaryVersion   string          `json:"binary_version"`
+	// Set for stagings created by `migrate` (own subscription on this
+	// server, source pulled over SSH).
+	Subscription *subscriptionInfo `json:"subscription,omitempty"`
+}
+
+type subscriptionInfo struct {
+	Name       string `json:"name"`
+	SystemUser string `json:"system_user"`
+	Password   string `json:"system_password"`
+	SourceHost string `json:"source_host"`
 }
 
 type dbCreds struct {
@@ -34,9 +44,9 @@ type dbCreds struct {
 }
 
 type elasticPrefixes struct {
-	ES6     string `json:"elasticsearch6,omitempty"`
-	ES7     string `json:"elasticsearch7,omitempty"`
-	Amasty  string `json:"amasty_elastic,omitempty"`
+	ES6    string `json:"elasticsearch6,omitempty"`
+	ES7    string `json:"elasticsearch7,omitempty"`
+	Amasty string `json:"amasty_elastic,omitempty"`
 }
 
 type basicAuth struct {
@@ -80,6 +90,14 @@ func saveCredentials(c *config) error {
 		BinaryVersion: version,
 	}
 
+	if c.isRemote() {
+		creds.Subscription = &subscriptionInfo{
+			Name:       c.stagingFQDN,
+			SystemUser: c.subLogin,
+			Password:   c.subPass,
+			SourceHost: c.remoteHost,
+		}
+	}
 	if !c.skipBasicAuth {
 		creds.BasicAuth = basicAuth{
 			User:     c.basicAuthUser,

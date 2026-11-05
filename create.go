@@ -184,13 +184,13 @@ func runCreate(args []string) {
 
 	// Phase 2: Plesk resources
 	printStep(2, total, "Create Plesk subdomain + database")
-	sp = newSpinner(fmt.Sprintf("Creating subdomain %s.%s", c.stagingName, c.domain))
+	sp = newSpinner(fmt.Sprintf("Creating subdomain %s", c.stagingHost()))
 	sp.Start()
 	if err := pleskSubdomainCreate(c); err != nil {
 		sp.Stop(false, fmt.Sprintf("%v", err))
 		failf("%v", err)
 	}
-	sp.Stop(true, fmt.Sprintf("subdomain %s created", bold(c.stagingName+"."+c.domain)))
+	sp.Stop(true, fmt.Sprintf("subdomain %s created", bold(c.stagingHost())))
 
 	sp = newSpinner(fmt.Sprintf("Creating database %s", c.targetDB))
 	sp.Start()
@@ -211,12 +211,12 @@ func runCreate(args []string) {
 	// Phase 3: SSL
 	printStep(3, total, "Issue SSL certificate")
 	if !c.skipSSL {
-		sp = newSpinner(fmt.Sprintf("Requesting Let's Encrypt cert for %s.%s", c.stagingName, c.domain))
+		sp = newSpinner(fmt.Sprintf("Requesting Let's Encrypt cert for %s", c.stagingHost()))
 		sp.Start()
 		if err := pleskIssueSSL(c); err != nil {
 			sp.Stop(false, fmt.Sprintf("SSL issuance failed: %v", err))
-			warnf("you can retry later with: plesk bin extension --exec letsencrypt cli.php -d %s.%s",
-				c.stagingName, c.domain)
+			warnf("you can retry later with: plesk bin extension --exec letsencrypt cli.php -d %s",
+				c.stagingHost())
 			printInfo("continuing with self-signed cert (HTTPS will still work)")
 		} else {
 			sp.Stop(true, "Let's Encrypt certificate issued")

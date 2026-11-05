@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-05
+
+### Added
+- `migrate` subcommand: runs on the DESTINATION Plesk server and pulls a
+  live Magento site from another Plesk server over SSH (key auth, default
+  key `/root/.ssh/migration_rsa`, `--ssh-key` / `--ssh-port` /
+  `--ssh-user` overrides). The source is located through the source's
+  Plesk database (document root, PHP handler); files are pulled with
+  rsync over SSH and the database is streamed with mysqldump over SSH
+  (DB credentials passed via a temporary option file fed on stdin, never
+  on a command line). The staging copy is created in a NEW subscription
+  named after `--staging-domain` (`--service-plan`, `--owner`, `--ip`,
+  `--sys-user`), with document root `httpdocs/pub` and the live PHP
+  handler. All staging safeguards of `create` apply. The source server is
+  only read.
+- `cleanup --domain <staging-domain>` removes the whole subscription for
+  stagings created by `migrate`.
+
 ## [1.0.7] - 2026-09-02
 
 ### Fixed

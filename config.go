@@ -45,10 +45,26 @@ type config struct {
 	verbose              bool
 	logFile              string // path to write a copy of all tool output
 
+	// Remote migration (migrate subcommand)
+	remoteHost    string // source server IP / hostname
+	remoteUser    string // SSH user on the source (default root)
+	remotePort    string // SSH port on the source (default 22)
+	sshKey        string // private key (default /root/.ssh/migration_rsa)
+	stagingFQDN   string // full staging host name (new subscription)
+	servicePlan   string // Plesk service plan for the new subscription
+	subOwner      string // Plesk owner of the new subscription
+	targetIP      string // IP address for the new subscription
+	subLogin      string // system user of the new subscription
+	subPass       string // system user password (generated)
+	createdSub    bool   // the subscription was created by this run
+	remotePHPBin  string // PHP CLI on the source server
+	remoteDocRoot string // Plesk document root of the live domain (source)
+
 	// Resolved at runtime
 	sourceDBUser         string
 	sourceDBPass         string
 	sourceDBHost         string
+	targetDBHost         string // MySQL host for the staging DB (this server)
 	sysUser              string // Plesk system user for the subscription
 	webspaceRoot         string // subscription root dir, e.g. /var/www/vhosts/<webspace>
 	webspaceName         string // subscription name as Plesk knows it (for -webspace-name)
@@ -85,7 +101,22 @@ func (c *config) derive() error {
 
 // stagingURL returns the public staging URL.
 func (c *config) stagingURL() string {
-	return "https://" + c.stagingName + "." + c.domain + "/"
+	return "https://" + c.stagingHost() + "/"
+}
+
+// stagingHost returns the staging host name: the explicit FQDN for a
+// remote migration (--staging-domain), otherwise <staging-name>.<domain>.
+func (c *config) stagingHost() string {
+	if c.stagingFQDN != "" {
+		return c.stagingFQDN
+	}
+	return c.stagingName + "." + c.domain
+}
+
+// isRemote reports whether the source site lives on another server
+// (migrate mode: files and database are pulled over SSH).
+func (c *config) isRemote() bool {
+	return c.remoteHost != ""
 }
 
 // verbosef prints only when --verbose.

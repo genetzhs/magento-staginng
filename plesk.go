@@ -8,13 +8,22 @@ import (
 // pleskPHPHandlerID returns the Plesk PHP handler configured for the
 // domain (e.g. "plesk-php74-fpm"), or "" when it cannot be resolved.
 func pleskPHPHandlerID(domain string) string {
+	return pleskPHPHandlerIDQ(pleskDBQuery, domain)
+}
+
+// pleskQueryFn runs a query against a Plesk psa database (local or remote)
+// and returns the first field of the last result row.
+type pleskQueryFn func(query string) (string, error)
+
+// pleskPHPHandlerIDQ is pleskPHPHandlerID against an arbitrary psa database.
+func pleskPHPHandlerIDQ(query pleskQueryFn, domain string) string {
 	safe, err := safeDomainSQL(domain)
 	if err != nil {
 		return ""
 	}
 	q := "SELECT php_handler_id FROM hosting h JOIN domains d ON d.id = h.dom_id " +
 		"WHERE d.name = '" + safe + "'"
-	id, err := pleskDBQuery(q)
+	id, err := query(q)
 	if err != nil {
 		return ""
 	}
@@ -71,7 +80,7 @@ func pleskSubdomainCreate(c *config) error {
 	}
 	args := []string{
 		"/usr/sbin/plesk", "bin", "subdomain", "--create",
-		c.stagingName + "." + c.domain,
+		c.stagingHost(),
 		"-webspace-name", c.webspaceName,
 		"-www-root", c.stagingName + "/pub/",
 		"-php", "true",
@@ -92,7 +101,7 @@ func pleskSubdomainCreate(c *config) error {
 func pleskSubdomainExists(c *config) bool {
 	args := []string{
 		"/usr/sbin/plesk", "bin", "subdomain", "--info",
-		c.stagingName + "." + c.domain,
+		c.stagingHost(),
 	}
 	_, err := run(args[0], args[1:]...)
 	return err == nil
@@ -106,7 +115,7 @@ func pleskSubdomainRemove(c *config) error {
 	}
 	args := []string{
 		"/usr/sbin/plesk", "bin", "subdomain", "--remove",
-		c.stagingName + "." + c.domain,
+		c.stagingHost(),
 	}
 	out, err := run(args[0], args[1:]...)
 	if err != nil {
@@ -207,14 +216,14 @@ func pleskDatabaseRemove(c *config) error {
 // subdomain and Plesk will install it automatically.
 func pleskIssueSSL(c *config) error {
 	if c.dryRun {
-		infof("  [dry-run] plesk bin extension --exec letsencrypt cli.php -d %s.%s",
-			c.stagingName, c.domain)
+		infof("  [dry-run] plesk bin extension --exec letsencrypt cli.php -d %s",
+			c.stagingHost())
 		return nil
 	}
 	args := []string{
 		"/usr/sbin/plesk", "bin", "extension", "--exec", "letsencrypt",
 		"cli.php",
-		"-d", c.stagingName + "." + c.domain,
+		"-d", c.stagingHost(),
 	}
 	out, err := run(args[0], args[1:]...)
 	if err != nil {
@@ -227,13 +236,13 @@ func pleskIssueSSL(c *config) error {
 // Falls back to writing .htaccess directly if Plesk command fails.
 func pleskProtectedURLCreate(c *config, htpasswdPath string) error {
 	if c.dryRun {
-		infof("  [dry-run] plesk bin protected_url --create / -domain %s.%s -user %s -passwd ***",
-			c.stagingName, c.domain, c.basicAuthUser)
+		infof("  [dry-run] plesk bin protected_url --create / -domain %s -user %s -passwd ***",
+			c.stagingHost(), c.basicAuthUser)
 		return nil
 	}
 	args := []string{
 		"/usr/sbin/plesk", "bin", "protected_url", "--create", "/",
-		"-domain", c.stagingName + "." + c.domain,
+		"-domain", c.stagingHost(),
 		"-user", c.basicAuthUser,
 		"-passwd", c.basicAuthPass,
 	}
@@ -305,13 +314,18 @@ func dbFirstField(out string) string {
 // from /var/www/vhosts/<domain>/httpdocs (custom document roots, renamed
 // subscriptions, secondary domains). Domain aliases are followed.
 func pleskDocumentRoot(domain string) (string, error) {
+	return pleskDocumentRootQ(pleskDBQuery, domain)
+}
+
+// pleskDocumentRootQ is pleskDocumentRoot against an arbitrary psa database.
+func pleskDocumentRootQ(query pleskQueryFn, domain string) (string, error) {
 	safe, err := safeDomainSQL(domain)
 	if err != nil {
 		return "", err
 	}
 	q := "SELECT h.www_root FROM hosting h JOIN domains d ON d.id = h.dom_id " +
 		"WHERE d.name = '" + safe + "'"
-	root, err := pleskDBQuery(q)
+	root, err := query(q)
 	if err != nil {
 		return "", err
 	}
@@ -323,7 +337,7 @@ func pleskDocumentRoot(domain string) (string, error) {
 		"JOIN domains d ON d.id = a.dom_id " +
 		"JOIN hosting h ON h.dom_id = d.id " +
 		"WHERE a.name = '" + safe + "'"
-	root, err = pleskDBQuery(q)
+	root, err = query(q)
 	if err != nil {
 		return "", err
 	}

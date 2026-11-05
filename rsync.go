@@ -29,7 +29,14 @@ func rsyncCopy(c *config) error {
 	}
 	// rsync source/httpdocs/ -> target/  (contents of httpdocs go directly
 	// into the staging root, which is the document root).
-	args = append(args, c.sourcePath+"/", c.targetPath+"/")
+	src := c.sourcePath + "/"
+	if c.isRemote() {
+		// Pull from the live server over SSH (compressed, args protected
+		// from remote shell word-splitting).
+		args = append(args, "-z", "-s", "-e", rsyncRemoteShell(c))
+		src = remoteSpec(c) + ":" + src
+	}
+	args = append(args, src, c.targetPath+"/")
 
 	if c.dryRun {
 		printInfo("[dry-run] rsync %d excludes -> %s", len(rsyncExcludes), c.targetPath)

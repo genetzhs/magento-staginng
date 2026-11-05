@@ -154,6 +154,21 @@ func runCleanup(args []string) {
 		}
 	}
 
+	// Staging created by `migrate`: it owns a whole subscription.
+	if creds.Subscription != nil && creds.Subscription.Name != "" {
+		infof("About to delete subscription %s (files, database %s, users)",
+			creds.Subscription.Name, creds.TargetDB.Name)
+		if !nonInteractive && !promptConfirm("\nConfirm deletion? This cannot be undone", false) {
+			infof("aborted")
+			os.Exit(0)
+		}
+		if err := pleskSubscriptionRemove(creds.Subscription.Name); err != nil {
+			failf("%v", err)
+		}
+		infof("✓ staging subscription removed")
+		return
+	}
+
 	infof("About to delete:")
 	infof("  Subdomain:     %s.%s", stagingName, domain)
 	infof("  Path:          %s", creds.TargetPath)

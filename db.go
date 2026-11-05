@@ -58,7 +58,7 @@ func getSchemaOnlyTables(c *config) ([]string, error) {
 	)
 
 	// Use plesk db for the query (uses root MySQL access).
-	out, err := run("/usr/sbin/plesk", "db", query)
+	out, err := srcRun(c, "/usr/sbin/plesk", "db", query)
 	if err != nil {
 		return nil, fmt.Errorf("querying schema-only tables: %v\n%s", err, out)
 	}
@@ -94,7 +94,7 @@ func mysqlExec(c *config, sql string) error {
 	args := []string{
 		"--user=" + c.targetDBUser,
 		"--password=" + c.targetDBPass,
-		"-h", c.sourceDBHost,
+		"-h", c.targetDBHost,
 		c.targetDB,
 		"-e", sql,
 	}
@@ -164,7 +164,7 @@ func mysqldumpPipe(c *config, schemaOnlyTables []string) error {
 	targetArgs := []string{
 		"--user=" + c.targetDBUser,
 		"--password=" + c.targetDBPass,
-		"-h", c.sourceDBHost,
+		"-h", c.targetDBHost,
 		c.targetDB,
 	}
 
@@ -236,7 +236,7 @@ func boldInt(n int) string {
 // countDataTables returns the total number of tables in the source database.
 // Used for verbose logging (caller subtracts schema-only count).
 func countDataTables(c *config, schemaOnlyTables []string) int {
-	out, err := run("/usr/sbin/plesk", "db",
+	out, err := srcRun(c, "/usr/sbin/plesk", "db",
 		fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='%s';", c.sourceDB))
 	if err != nil {
 		return -1
@@ -288,7 +288,7 @@ func applyStagingConfigSQL(c *config) error {
 	// Cookie domain: set to the staging subdomain so cookies are scoped
 	// correctly. Without this, the production cookie domain (e.g. .example.com)
 	// is reused and sessions leak / break on the staging subdomain.
-	cookieDomain := c.stagingName + "." + c.domain
+	cookieDomain := c.stagingHost()
 	sqls = append(sqls, fmt.Sprintf(
 		"INSERT INTO core_config_data (scope,scope_id,path,value) VALUES ('default',0,'web/cookie/cookie_domain','%s') ON DUPLICATE KEY UPDATE value='%s';",
 		cookieDomain, cookieDomain))
@@ -348,7 +348,7 @@ func applyStagingConfigSQL(c *config) error {
 // so we can report them and confirm they will change.
 func fetchOriginalESPrefixes(c *config) {
 	q := fmt.Sprintf("SELECT path, value FROM %s.core_config_data WHERE path IN ('catalog/search/elasticsearch6_index_prefix','catalog/search/elasticsearch7_index_prefix','amasty_elastic/connection/index_prefix');", c.sourceDB)
-	out, err := run("/usr/sbin/plesk", "db", q)
+	out, err := srcRun(c, "/usr/sbin/plesk", "db", q)
 	if err != nil {
 		c.verbosef("fetchOriginalESPrefixes query failed: %v", err)
 		return
@@ -387,7 +387,7 @@ func verifyStagingDB(c *config) error {
 	q := "SELECT value FROM core_config_data WHERE path='web/secure/base_url';"
 	out, err := run("mysql",
 		"--user="+c.targetDBUser, "--password="+c.targetDBPass,
-		"-h", c.sourceDBHost, c.targetDB, "-e", q)
+		"-h", c.targetDBHost, c.targetDB, "-e", q)
 	if err != nil {
 		return fmt.Errorf("verify query failed: %v\n%s", err, out)
 	}

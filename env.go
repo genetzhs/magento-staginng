@@ -174,6 +174,8 @@ func readSourceEnvAndDerive(c *config) error {
 	if c.sourceDBHost == "" {
 		c.sourceDBHost = "localhost"
 	}
+	// Local create: the staging DB lives on the same MySQL server.
+	c.targetDBHost = c.sourceDBHost
 	c.sourceMageMode = getString(env, "MAGE_MODE")
 	c.originalRedisPrefix = getString(env, "cache", "frontend", "default", "id_prefix")
 	c.sourceAdminFrontName = getString(env, "backend", "frontName")

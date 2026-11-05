@@ -74,7 +74,7 @@ func parseDuOutput(out string) int64 {
 // real run and reports what would actually be transferred.
 func estimateFilesSize(c *config) (sourceTotal, stagingTotal int64, err error) {
 	// Total source size (apparent bytes for accuracy)
-	out, runErr := run("du", "-sb", c.sourcePath)
+	out, runErr := srcRun(c, "du", "-sb", c.sourcePath)
 	if runErr != nil {
 		return 0, 0, fmt.Errorf("du source failed: %v\n%s", runErr, out)
 	}
@@ -90,7 +90,7 @@ func estimateFilesSize(c *config) (sourceTotal, stagingTotal int64, err error) {
 	}
 	// Dry run: nothing is written to the target.
 	args = append(args, c.sourcePath+"/", "/tmp/magento-staging-estimate-target/")
-	out, runErr = run("rsync", args...)
+	out, runErr = srcRun(c, "rsync", args...)
 	if runErr != nil {
 		// rsync unavailable or failed — fall back to the full source size
 		// (better to overestimate the disk needed than to fail).
@@ -160,7 +160,7 @@ func estimateDBSize(c *config, schemaOnlyTables []string) (sourceTotal, stagingT
 		"SELECT IFNULL(SUM(data_length+index_length),0) FROM information_schema.tables WHERE table_schema='%s';",
 		c.sourceDB,
 	)
-	out, runErr := run("/usr/sbin/plesk", "db", q)
+	out, runErr := srcRun(c, "/usr/sbin/plesk", "db", q)
 	if runErr != nil {
 		return 0, 0, fmt.Errorf("source DB size query failed: %v\n%s", runErr, out)
 	}
@@ -190,7 +190,7 @@ func estimateDBSize(c *config, schemaOnlyTables []string) (sourceTotal, stagingT
 			"SELECT IFNULL(SUM(data_length+index_length),0) FROM information_schema.tables WHERE table_schema='%s' AND table_name IN (%s);",
 			c.sourceDB, strings.Join(quoted[i:end], ","),
 		)
-		out, runErr = run("/usr/sbin/plesk", "db", q)
+		out, runErr = srcRun(c, "/usr/sbin/plesk", "db", q)
 		if runErr != nil {
 			c.verbosef("schema-only size query failed: %v\n%s", runErr, out)
 			continue

@@ -41,6 +41,9 @@ func main() {
 		case "create":
 			runCreate(os.Args[2:])
 			return
+		case "migrate":
+			runMigrate(os.Args[2:])
+			return
 		case "list":
 			runList(os.Args[2:])
 			return

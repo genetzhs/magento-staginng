@@ -72,6 +72,26 @@ cd /var/www/vhosts/<domain>
 ./magento-staging cleanup --domain example.com --staging-name staging
 ```
 
+## Migrate from another server
+
+Run on the destination Plesk server. The source must be a Plesk server
+reachable over SSH with key auth as root (needed for `plesk db`).
+
+```bash
+./magento-staging migrate \
+    --source-host live.example.com --ssh-port 2222 \
+    --domain example.com \
+    --staging-domain example.staging.example.net \
+    --dry-run
+```
+
+A new subscription `--staging-domain` is created (plan `Default Domain`,
+owner `admin`, the only IPv4 unless `--ip` is given), the files and DB are
+pulled over SSH and the usual staging safeguards are applied. If the
+source hostname resolves to the destination itself (e.g. the live domain
+also has a DNS zone on the destination Plesk), pass the source IP.
+Remove with `magento-staging cleanup --domain <staging-domain>`.
+
 ## Path auto-detection
 
 All paths are resolved by asking Plesk for the **document root of the live

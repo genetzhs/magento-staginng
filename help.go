@@ -14,6 +14,8 @@ USAGE:
 
 COMMANDS:
     create    Create a new staging site (interactive by default)
+    migrate   Pull a live site from another Plesk server over SSH into a
+              NEW subscription on this server (run on the destination)
     list      List all staging sites on this server
     info      Show details for a staging site
     cleanup   Delete a staging site (interactive confirmation)
@@ -65,6 +67,19 @@ CREATE FLAGS:
     --check-update                 Check GitHub for newer release
     --help, -h                     Show this help
 
+MIGRATE FLAGS (plus the create flags for DB / safeguards / data):
+    --source-host <host>           Source (live) server IP or hostname
+    --ssh-port <port>              SSH port of the source (default: 22)
+    --ssh-user <user>              SSH user on the source (default: root)
+    --ssh-key <path>               Private key (default: /root/.ssh/migration_rsa)
+    --domain <domain>              Live domain on the source server
+    --staging-domain <fqdn>        New staging subscription on this server
+    --service-plan <plan>          Plesk service plan (default: "Default Domain")
+    --owner <login>                Subscription owner (default: admin)
+    --ip <ip>                      Subscription IP (default: the only IPv4)
+    --sys-user <user>              Subscription system user
+                                   (default: first label of --staging-domain)
+
 EXAMPLES:
     # Interactive create
     ssh root@server
@@ -76,6 +91,10 @@ EXAMPLES:
 
     # Dry run
     ./magento-staging create --domain example.com --dry-run
+
+    # Migrate from another server (run on the destination)
+    ./magento-staging migrate --source-host live.example.com --ssh-port 2222 \
+        --domain example.com --staging-domain example.staging.example.net --dry-run
 
     # Custom staging name
     ./magento-staging create --domain example.com --staging-name qa
