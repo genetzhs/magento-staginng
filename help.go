@@ -77,6 +77,10 @@ MIGRATE FLAGS (plus the create flags for DB / safeguards / data):
     --service-plan <plan>          Plesk service plan (default: "Default Domain")
     --owner <login>                Subscription owner (default: admin)
     --ip <ip>                      Subscription IP (default: the only IPv4)
+    --enable-ssh                   Give the subscription user SSH (/bin/bash)
+    --ssh-authorized-keys <file>   Public keys (one per line) to install in
+                                   <webspace>/.ssh/authorized_keys
+                                   (implies --enable-ssh)
     --sys-user <user>              Subscription system user
                                    (default: first label of --staging-domain)
 

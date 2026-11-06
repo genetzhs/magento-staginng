@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-06
+
+### Added
+- `migrate --enable-ssh`: gives the new subscription's system user SSH
+  access with `/bin/bash`.
+- `migrate --ssh-authorized-keys <file>`: installs the public keys from
+  the file (one per line, `#` comments allowed, non-key lines rejected)
+  into `<webspace-root>/.ssh/authorized_keys` (0700/0600, owned by the
+  system user); implies `--enable-ssh`. Existing keys are kept.
+
 ## [1.1.1] - 2026-11-05
 
 ### Fixed

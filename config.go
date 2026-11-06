@@ -46,19 +46,22 @@ type config struct {
 	logFile              string // path to write a copy of all tool output
 
 	// Remote migration (migrate subcommand)
-	remoteHost    string // source server IP / hostname
-	remoteUser    string // SSH user on the source (default root)
-	remotePort    string // SSH port on the source (default 22)
-	sshKey        string // private key (default /root/.ssh/migration_rsa)
-	stagingFQDN   string // full staging host name (new subscription)
-	servicePlan   string // Plesk service plan for the new subscription
-	subOwner      string // Plesk owner of the new subscription
-	targetIP      string // IP address for the new subscription
-	subLogin      string // system user of the new subscription
-	subPass       string // system user password (generated)
-	createdSub    bool   // the subscription was created by this run
-	remotePHPBin  string // PHP CLI on the source server
-	remoteDocRoot string // Plesk document root of the live domain (source)
+	remoteHost    string   // source server IP / hostname
+	remoteUser    string   // SSH user on the source (default root)
+	remotePort    string   // SSH port on the source (default 22)
+	sshKey        string   // private key (default /root/.ssh/migration_rsa)
+	stagingFQDN   string   // full staging host name (new subscription)
+	servicePlan   string   // Plesk service plan for the new subscription
+	subOwner      string   // Plesk owner of the new subscription
+	targetIP      string   // IP address for the new subscription
+	subLogin      string   // system user of the new subscription
+	subPass       string   // system user password (generated)
+	createdSub    bool     // the subscription was created by this run
+	enableSSH     bool     // give the subscription user a /bin/bash shell
+	sshKeysFile   string   // public keys for <webspace>/.ssh/authorized_keys
+	sshAuthKeys   []string // keys loaded from sshKeysFile
+	remotePHPBin  string   // PHP CLI on the source server
+	remoteDocRoot string   // Plesk document root of the live domain (source)
 
 	// Resolved at runtime
 	sourceDBUser         string

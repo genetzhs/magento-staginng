@@ -25,6 +25,8 @@ func runMigrate(args []string) {
 	fs.StringVar(&c.servicePlan, "service-plan", "Default Domain", "Plesk service plan for the new subscription")
 	fs.StringVar(&c.subOwner, "owner", "admin", "Plesk owner (customer/reseller login) of the new subscription")
 	fs.StringVar(&c.targetIP, "ip", "", "IP address for the new subscription (default: the only IPv4 in Plesk)")
+	fs.BoolVar(&c.enableSSH, "enable-ssh", false, "Give the subscription system user SSH access (/bin/bash)")
+	fs.StringVar(&c.sshKeysFile, "ssh-authorized-keys", "", "File with public keys to install in the subscription's ~/.ssh/authorized_keys (implies --enable-ssh)")
 	fs.StringVar(&c.subLogin, "sys-user", "", "System user of the new subscription (default: derived from --staging-domain)")
 	fs.StringVar(&c.targetDB, "target-db", "", "Target database name")
 	fs.StringVar(&c.targetDBUser, "target-db-user", "", "Target DB user")
@@ -83,6 +85,15 @@ func runMigrate(args []string) {
 	}
 	if _, err := safeDomainSQL(c.stagingFQDN); err != nil {
 		failf("--staging-domain: %v", err)
+	}
+
+	if c.sshKeysFile != "" {
+		keys, err := readAuthorizedKeys(c.sshKeysFile)
+		if err != nil {
+			failf("--ssh-authorized-keys: %v", err)
+		}
+		c.sshAuthKeys = keys
+		c.enableSSH = true
 	}
 
 	printBanner(version, commit, c.domain)
@@ -340,6 +351,14 @@ func runMigrate(args []string) {
 		warnf("HTTP verification: %v", err)
 	}
 
+	if c.enableSSH {
+		if err := enableSubscriptionSSH(c); err != nil {
+			warnf("SSH access setup failed: %v", err)
+		} else {
+			printOK("SSH enabled for %s (/bin/bash)", c.subLogin)
+		}
+	}
+
 	printStep(13, total, "Save credentials")
 	if err := saveCredentials(c); err != nil {
 		warnf("failed to save credentials: %v", err)
@@ -347,6 +366,9 @@ func runMigrate(args []string) {
 
 	printFinalSummary(c, schemaOnlyTables, est)
 	printKeyValue("Subscription", fmt.Sprintf("%s (system user %s)", c.stagingFQDN, c.subLogin))
+	if c.enableSSH {
+		printKeyValue("SSH", fmt.Sprintf("ssh %s@%s (%d key(s) installed)", c.subLogin, c.stagingFQDN, len(c.sshAuthKeys)))
+	}
 	printKeyValue("Source", fmt.Sprintf("%s:%s", c.remoteHost, c.sourcePath))
 }
 
@@ -370,6 +392,9 @@ func printMigrateSummary(c *config) {
 	printKeyValue("Source DB", c.sourceDB)
 	printKeyValue("New subscription", fmt.Sprintf("%s (plan %q, owner %s, IP %s)", c.stagingFQDN, c.servicePlan, c.subOwner, c.targetIP))
 	printKeyValue("System user", c.subLogin)
+	if c.enableSSH {
+		printKeyValue("SSH access", fmt.Sprintf("/bin/bash, %d key(s) from %s", len(c.sshAuthKeys), orDash(c.sshKeysFile)))
+	}
 	printKeyValue("Target", c.targetPath+" (docroot pub/)")
 	printKeyValue("Staging URL", c.stagingURL())
 	printKeyValue("Target DB", fmt.Sprintf("%s (user: %s)", c.targetDB, c.targetDBUser))

@@ -179,6 +179,8 @@ the whole subscription.
 | `--owner` | `admin` | Owner of the subscription |
 | `--ip` | the only IPv4 | IP of the subscription |
 | `--sys-user` | first label of the domain | System user of the subscription |
+| `--enable-ssh` | off | Gives the subscription's system user SSH access (`/bin/bash`) |
+| `--ssh-authorized-keys` | — | File of public keys (one per line, `#` comments allowed) appended to `<webspace>/.ssh/authorized_keys` (0600, owner the system user). Implies `--enable-ssh` |
 
 Also accepted, same as in `create`: `--target-db*`, `--redis-id-prefix`,
 `--elastic-suffix`, `--basic-auth-*`, `--php-bin` (CLI on the

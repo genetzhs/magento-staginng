@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -55,5 +56,20 @@ func TestSSHArgsAndStagingHost(t *testing.T) {
 	l := &config{stagingName: "staging", domain: "example.com"}
 	if l.stagingHost() != "staging.example.com" {
 		t.Errorf("stagingHost = %s", l.stagingHost())
+	}
+}
+
+func TestReadAuthorizedKeys(t *testing.T) {
+	dir := t.TempDir()
+	good := dir + "/keys"
+	_ = os.WriteFile(good, []byte("# team\nssh-ed25519 AAAAC3Nz dev@example.com\n\nssh-rsa AAAAB3Nz ops@example.com\n"), 0600)
+	keys, err := readAuthorizedKeys(good)
+	if err != nil || len(keys) != 2 {
+		t.Fatalf("got %v, %v", keys, err)
+	}
+	bad := dir + "/bad"
+	_ = os.WriteFile(bad, []byte("-----BEGIN OPENSSH PRIVATE KEY-----\n"), 0600)
+	if _, err := readAuthorizedKeys(bad); err == nil {
+		t.Error("private key line accepted")
 	}
 }
