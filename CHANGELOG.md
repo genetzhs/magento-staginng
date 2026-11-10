@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-10
+
+### Fixed
+- `setup:upgrade` no longer fails with "Current version of RDBMS is not
+  supported" (e.g. MariaDB 10.11 on Magento <= 2.4.6). Before running it,
+  the staging DB server version is checked against
+  `supportedVersionPatterns` in the staging `app/etc/di.xml` and
+  whitelisted there when missing; on a version rejection the upgrade is
+  retried once after whitelisting. Production is never modified.
+
 ## [1.2.0] - 2026-11-06
 
 ### Added
